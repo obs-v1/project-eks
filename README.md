@@ -59,3 +59,24 @@ Tear down in reverse: `app → observability → cluster` (`make destroy` in eac
 - **Public endpoints**: EKS API is public (kubectl from anywhere); UIs/frontend via Traefik + external-dns + ACM.
 - **BankObs images stay private to you**: each service is a passthrough `FROM`, so students can wire
   their own ECR + CI/CD without the source.
+
+## Versions
+
+Pinned, current as of the last refresh. EKS defaults to `1.34` — bump to the latest standard-support
+release (`aws eks describe-cluster-versions`).
+
+| Terraform | | Helm charts | |
+|---|---|---|---|
+| aws provider | `~> 6.0` | kube-prometheus-stack | `92.17.0` |
+| helm provider | `~> 3.0` | loki | `7.5.0` |
+| kubernetes provider | `~> 3.0` | jaeger (**v2**) | `4.16.1` |
+| eks module | `~> 21.0` | pyroscope | `2.4.2` |
+| vpc module | `~> 6.0` | opentelemetry-collector | `0.178.1` |
+| iam module | `~> 6.0` | cluster-autoscaler | `9.59.0` |
+| | | external-dns | `1.23.0` |
+| | | traefik | `42.2.0` |
+| | | pyrra (image + CRD) | `v0.10.2` |
+
+> These passed `terraform validate` + `helm template` offline. The major jumps — **eks v21 + aws v6**
+> and **jaeger v2** — can change resource behavior, so review a `terraform plan` on a live account
+> before applying.

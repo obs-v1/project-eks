@@ -5,10 +5,10 @@ locals {
 
 # ── Observability cluster IRSA roles ─────────────────────────────────────────
 module "irsa_obs_ebs_csi" {
-  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
-  version = "~> 5.44"
+  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
+  version = "~> 6.0"
 
-  role_name             = "${local.obs_cluster_name}-ebs-csi"
+  name                  = "${local.obs_cluster_name}-ebs-csi"
   attach_ebs_csi_policy = true
   oidc_providers = {
     main = {
@@ -20,10 +20,10 @@ module "irsa_obs_ebs_csi" {
 }
 
 module "irsa_obs_external_dns" {
-  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
-  version = "~> 5.44"
+  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
+  version = "~> 6.0"
 
-  role_name                     = "${local.obs_cluster_name}-external-dns"
+  name                          = "${local.obs_cluster_name}-external-dns"
   attach_external_dns_policy    = true
   external_dns_hosted_zone_arns = [local.public_zone_arn, local.private_zone_arn] # UIs + private collector
   oidc_providers = {
@@ -36,10 +36,10 @@ module "irsa_obs_external_dns" {
 }
 
 module "irsa_obs_autoscaler" {
-  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
-  version = "~> 5.44"
+  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
+  version = "~> 6.0"
 
-  role_name                        = "${local.obs_cluster_name}-cluster-autoscaler"
+  name                             = "${local.obs_cluster_name}-cluster-autoscaler"
   attach_cluster_autoscaler_policy = true
   cluster_autoscaler_cluster_names = [local.obs_cluster_name]
   oidc_providers = {
@@ -53,10 +53,10 @@ module "irsa_obs_autoscaler" {
 
 # ── BankObs cluster IRSA roles ───────────────────────────────────────────────
 module "irsa_bankobs_ebs_csi" {
-  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
-  version = "~> 5.44"
+  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
+  version = "~> 6.0"
 
-  role_name             = "${local.bankobs_cluster_name}-ebs-csi"
+  name                  = "${local.bankobs_cluster_name}-ebs-csi"
   attach_ebs_csi_policy = true
   oidc_providers = {
     main = {
@@ -68,10 +68,10 @@ module "irsa_bankobs_ebs_csi" {
 }
 
 module "irsa_bankobs_external_dns" {
-  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
-  version = "~> 5.44"
+  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
+  version = "~> 6.0"
 
-  role_name                     = "${local.bankobs_cluster_name}-external-dns"
+  name                          = "${local.bankobs_cluster_name}-external-dns"
   attach_external_dns_policy    = true
   external_dns_hosted_zone_arns = [local.public_zone_arn] # bankobs.<domain> only
   oidc_providers = {
@@ -84,10 +84,10 @@ module "irsa_bankobs_external_dns" {
 }
 
 module "irsa_bankobs_autoscaler" {
-  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
-  version = "~> 5.44"
+  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
+  version = "~> 6.0"
 
-  role_name                        = "${local.bankobs_cluster_name}-cluster-autoscaler"
+  name                             = "${local.bankobs_cluster_name}-cluster-autoscaler"
   attach_cluster_autoscaler_policy = true
   cluster_autoscaler_cluster_names = [local.bankobs_cluster_name]
   oidc_providers = {

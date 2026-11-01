@@ -27,7 +27,7 @@ AGENT_CTX ?= obs-v1-bankobs   # the agent runs IN the bankobs cluster
 # them by OTLP to the central collector across the peering. (Deploy after the obs stack.)
 agent: repos
 	helm --kube-context $(AGENT_CTX) upgrade --install bankobs-agent open-telemetry/opentelemetry-collector \
-	  --version 0.108.0 -n monitoring --create-namespace -f agent/values-agent.yaml
+	  --version 0.178.1 -n monitoring --create-namespace -f agent/values-agent.yaml
 	@echo "  ✓ bankobs-agent deployed to $(AGENT_CTX) (metrics scrape + logs tail → obs collector)."
 
 repos:
@@ -45,25 +45,25 @@ all: repos namespace kube-prometheus-stack loki jaeger pyroscope otel-collector 
 	@echo ""; echo "  ✓ observability stack deployed to context $(CONTEXT)."
 
 kube-prometheus-stack: namespace
-	$(H) kps prometheus-community/kube-prometheus-stack --version 65.5.1 $(HN) \
+	$(H) kps prometheus-community/kube-prometheus-stack --version 92.17.0 $(HN) \
 	  -f values/kube-prometheus-stack.yaml --wait --timeout 15m
 
 loki: namespace
-	$(H) loki grafana/loki --version 6.18.0 $(HN) -f values/loki.yaml
+	$(H) loki grafana/loki --version 7.5.0 $(HN) -f values/loki.yaml
 
 jaeger: namespace
-	$(H) jaeger jaegertracing/jaeger --version 3.4.1 $(HN) -f values/jaeger.yaml
+	$(H) jaeger jaegertracing/jaeger --version 4.16.1 $(HN) -f values/jaeger.yaml
 
 pyroscope: namespace
-	$(H) pyroscope grafana/pyroscope --version 1.7.1 $(HN) -f values/pyroscope.yaml
+	$(H) pyroscope grafana/pyroscope --version 2.4.2 $(HN) -f values/pyroscope.yaml
 
 otel-collector: namespace
-	$(H) otel-collector open-telemetry/opentelemetry-collector --version 0.108.0 $(HN) \
+	$(H) otel-collector open-telemetry/opentelemetry-collector --version 0.178.1 $(HN) \
 	  -f values/otel-collector.yaml
 
 pyrra: namespace
 	# CRD first (pinned upstream release), then the operator + UI, then the sample SLO.
-	$(K) apply -f https://raw.githubusercontent.com/pyrra-dev/pyrra/v0.9.0/examples/kubernetes/manifests/setup/pyrra-slo-CustomResourceDefinition.yaml
+	$(K) apply -f https://raw.githubusercontent.com/pyrra-dev/pyrra/v0.10.2/examples/kubernetes/manifests/setup/pyrra-slo-CustomResourceDefinition.yaml
 	$(K) apply -f pyrra/pyrra.yaml
 	$(K) apply -f pyrra/slo.yaml
 

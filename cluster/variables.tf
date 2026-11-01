@@ -28,9 +28,9 @@ variable "project" {
 }
 
 variable "eks_version" {
-  description = "Kubernetes version for both clusters."
+  description = "Kubernetes version for both clusters. Bump to the latest EKS standard-support release; check with: aws eks describe-cluster-versions"
   type        = string
-  default     = "1.31"
+  default     = "1.34"
 }
 
 # ── Networking ────────────────────────────────────────────────────────────────

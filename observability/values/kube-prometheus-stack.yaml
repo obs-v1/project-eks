@@ -73,7 +73,7 @@ grafana:
       uid: jaeger
       type: jaeger
       access: proxy
-      url: http://jaeger-query:16686
+      url: http://jaeger:16686
       jsonData:
         tracesToLogsV2:
           datasourceUid: loki

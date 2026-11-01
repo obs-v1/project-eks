@@ -19,10 +19,11 @@ provider "kubernetes" {
 
 provider "helm" {
   alias = "observability"
-  kubernetes {
+  # helm provider 3.x: `kubernetes` is a nested attribute (was a block), and `exec` with it.
+  kubernetes = {
     host                   = module.eks_observability.cluster_endpoint
     cluster_ca_certificate = base64decode(module.eks_observability.cluster_certificate_authority_data)
-    exec {
+    exec = {
       api_version = "client.authentication.k8s.io/v1beta1"
       command     = "aws"
       args        = ["eks", "get-token", "--cluster-name", module.eks_observability.cluster_name, "--region", var.aws_region]
@@ -43,10 +44,10 @@ provider "kubernetes" {
 
 provider "helm" {
   alias = "bankobs"
-  kubernetes {
+  kubernetes = {
     host                   = module.eks_bankobs.cluster_endpoint
     cluster_ca_certificate = base64decode(module.eks_bankobs.cluster_certificate_authority_data)
-    exec {
+    exec = {
       api_version = "client.authentication.k8s.io/v1beta1"
       command     = "aws"
       args        = ["eks", "get-token", "--cluster-name", module.eks_bankobs.cluster_name, "--region", var.aws_region]

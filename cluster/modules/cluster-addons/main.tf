@@ -8,7 +8,7 @@ resource "aws_eks_addon" "ebs_csi" {
   tags                        = var.tags
 }
 
-resource "kubernetes_storage_class" "gp3" {
+resource "kubernetes_storage_class_v1" "gp3" {
   metadata {
     name = "gp3"
     annotations = {
@@ -26,37 +26,22 @@ resource "kubernetes_storage_class" "gp3" {
 }
 
 # ── Cluster Autoscaler ───────────────────────────────────────────────────────
+# helm provider 3.x: `set` is a list attribute, not repeated blocks.
 resource "helm_release" "cluster_autoscaler" {
   name       = "cluster-autoscaler"
   repository = "https://kubernetes.github.io/autoscaler"
   chart      = "cluster-autoscaler"
-  version    = "9.43.2"
+  version    = "9.59.0"
   namespace  = "kube-system"
 
-  set {
-    name  = "autoDiscovery.clusterName"
-    value = var.cluster_name
-  }
-  set {
-    name  = "awsRegion"
-    value = var.region
-  }
-  set {
-    name  = "rbac.serviceAccount.name"
-    value = "cluster-autoscaler"
-  }
-  set {
-    name  = "rbac.serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
-    value = var.autoscaler_role_arn
-  }
-  set {
-    name  = "extraArgs.balance-similar-node-groups"
-    value = "true"
-  }
-  set {
-    name  = "extraArgs.skip-nodes-with-system-pods"
-    value = "false"
-  }
+  set = [
+    { name = "autoDiscovery.clusterName", value = var.cluster_name },
+    { name = "awsRegion", value = var.region },
+    { name = "rbac.serviceAccount.name", value = "cluster-autoscaler" },
+    { name = "rbac.serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn", value = var.autoscaler_role_arn },
+    { name = "extraArgs.balance-similar-node-groups", value = "true" },
+    { name = "extraArgs.skip-nodes-with-system-pods", value = "false" },
+  ]
 }
 
 # ── external-dns (ingress + service sources; public UIs + private collector) ──
@@ -64,44 +49,20 @@ resource "helm_release" "external_dns" {
   name       = "external-dns"
   repository = "https://kubernetes-sigs.github.io/external-dns"
   chart      = "external-dns"
-  version    = "1.15.0"
+  version    = "1.23.0"
   namespace  = "kube-system"
 
-  set {
-    name  = "provider.name"
-    value = "aws"
-  }
-  set {
-    name  = "serviceAccount.name"
-    value = "external-dns"
-  }
-  set {
-    name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
-    value = var.external_dns_role_arn
-  }
-  set {
-    name  = "policy"
-    value = "upsert-only" # never delete records it didn't create; safe in a shared zone
-  }
-  set {
-    name  = "txtOwnerId"
-    value = var.cluster_name
-  }
-  set {
-    name  = "sources[0]"
-    value = "ingress"
-  }
-  set {
-    name  = "sources[1]"
-    value = "service"
-  }
-  dynamic "set" {
-    for_each = var.external_dns_domain_filters
-    content {
-      name  = "domainFilters[${set.key}]"
-      value = set.value
-    }
-  }
+  set = concat([
+    { name = "provider.name", value = "aws" },
+    { name = "serviceAccount.name", value = "external-dns" },
+    { name = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn", value = var.external_dns_role_arn },
+    { name = "policy", value = "upsert-only" }, # never delete records it didn't create; safe in a shared zone
+    { name = "txtOwnerId", value = var.cluster_name },
+    { name = "sources[0]", value = "ingress" },
+    { name = "sources[1]", value = "service" },
+    ], [
+    for i, d in var.external_dns_domain_filters : { name = "domainFilters[${i}]", value = d }
+  ])
 }
 
 # ── Traefik ingress controller (public NLB, TLS terminated at the NLB via ACM) ─
@@ -109,7 +70,7 @@ resource "helm_release" "traefik" {
   name             = "traefik"
   repository       = "https://traefik.github.io/charts"
   chart            = "traefik"
-  version          = "33.0.0"
+  version          = "42.2.0"
   namespace        = "traefik"
   create_namespace = true
 

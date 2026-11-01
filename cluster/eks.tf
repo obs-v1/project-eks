@@ -1,16 +1,16 @@
 # ── EKS: observability cluster ───────────────────────────────────────────────
 module "eks_observability" {
   source  = "terraform-aws-modules/eks/aws"
-  version = "~> 20.24"
+  version = "~> 21.0"
 
-  cluster_name    = local.obs_cluster_name
-  cluster_version = var.eks_version
+  name               = local.obs_cluster_name
+  kubernetes_version = var.eks_version
 
   # Public API so you can kubectl from anywhere; private access on too, for the
   # in-VPC/peered paths.
-  cluster_endpoint_public_access       = true
-  cluster_endpoint_public_access_cidrs = var.public_api_access_cidrs
-  cluster_endpoint_private_access      = true
+  endpoint_public_access       = true
+  endpoint_public_access_cidrs = var.public_api_access_cidrs
+  endpoint_private_access      = true
 
   enable_irsa                              = true
   enable_cluster_creator_admin_permissions = true
@@ -20,7 +20,7 @@ module "eks_observability" {
   subnet_ids = module.vpc_observability.private_subnets
 
   # EBS CSI is added separately (addons.tf) to avoid an OIDC dependency cycle.
-  cluster_addons = {
+  addons = {
     coredns    = { most_recent = true }
     kube-proxy = { most_recent = true }
     vpc-cni    = { most_recent = true, before_compute = true }
@@ -43,14 +43,14 @@ module "eks_observability" {
 # ── EKS: bankobs cluster ─────────────────────────────────────────────────────
 module "eks_bankobs" {
   source  = "terraform-aws-modules/eks/aws"
-  version = "~> 20.24"
+  version = "~> 21.0"
 
-  cluster_name    = local.bankobs_cluster_name
-  cluster_version = var.eks_version
+  name               = local.bankobs_cluster_name
+  kubernetes_version = var.eks_version
 
-  cluster_endpoint_public_access       = true
-  cluster_endpoint_public_access_cidrs = var.public_api_access_cidrs
-  cluster_endpoint_private_access      = true
+  endpoint_public_access       = true
+  endpoint_public_access_cidrs = var.public_api_access_cidrs
+  endpoint_private_access      = true
 
   enable_irsa                              = true
   enable_cluster_creator_admin_permissions = true
@@ -59,7 +59,7 @@ module "eks_bankobs" {
   vpc_id     = module.vpc_bankobs.vpc_id
   subnet_ids = module.vpc_bankobs.private_subnets
 
-  cluster_addons = {
+  addons = {
     coredns    = { most_recent = true }
     kube-proxy = { most_recent = true }
     vpc-cni    = { most_recent = true, before_compute = true }

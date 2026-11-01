@@ -42,7 +42,7 @@ config:
       spike_limit_percentage: 25
   exporters:
     otlp/jaeger:
-      endpoint: jaeger-collector:4317
+      endpoint: jaeger:4317
       tls: { insecure: true }
     prometheusremotewrite:
       endpoint: http://kps-prometheus:9090/api/v1/write

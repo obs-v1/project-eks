@@ -9,7 +9,7 @@ locals {
 # ── Observability VPC ─────────────────────────────────────────────────────────
 module "vpc_observability" {
   source  = "terraform-aws-modules/vpc/aws"
-  version = "~> 5.13"
+  version = "~> 6.0"
 
   name = "${local.obs_cluster_name}-vpc"
   cidr = var.obs_vpc_cidr
@@ -39,7 +39,7 @@ module "vpc_observability" {
 # ── BankObs VPC ───────────────────────────────────────────────────────────────
 module "vpc_bankobs" {
   source  = "terraform-aws-modules/vpc/aws"
-  version = "~> 5.13"
+  version = "~> 6.0"
 
   name = "${local.bankobs_cluster_name}-vpc"
   cidr = var.bankobs_vpc_cidr
