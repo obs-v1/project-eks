@@ -4,21 +4,11 @@ Two EKS clusters in two VPCs: one runs the **observability stack**, the other ru
 (60 microservices). Telemetry flows **privately** between them over VPC peering; the UIs and the
 app frontend are exposed publicly through Traefik with your own DNS + ACM cert.
 
-```
-   Internet ──TLS(ACM)──► Traefik NLB (public)                 Traefik NLB (public) ──TLS(ACM)──► Internet
-                 │                                                      │
-        ┌────────┴─────────────┐                          ┌────────────┴───────────┐
-        │  OBSERVABILITY VPC    │   VPC peering (private)  │     BANKOBS VPC         │
-        │  10.10.0.0/16         │◄────────────────────────►│     10.20.0.0/16        │
-        │                       │                          │                         │
-        │  EKS: observability   │   otel-collector         │   EKS: bankobs          │
-        │   • OTel Collector ◄──┼──.obs.internal:4317──────┼── 60 services (OTLP)    │
-        │   • Prometheus/Grafana│   (Route53 private zone, │   • StatefulSet DBs      │
-        │   • Loki · Jaeger     │    resolves in both VPCs)│   • web-portal (frontend)│
-        │   • Pyroscope · Pyrra │                          │                         │
-        └───────────────────────┘                          └─────────────────────────┘
-          grafana/jaeger/… .<DOMAIN>                          bankobs.<DOMAIN>
-```
+![project-eks architecture](docs/architecture.png)
+
+> Traces are pushed straight to the collector by each service's OTel SDK; **metrics and logs**
+> are gathered by a node-local **bankobs-agent** (scrape `/metrics` + tail logs) and forwarded OTLP —
+> all privately over the VPC peering. ([editable source](docs/architecture.svg))
 
 ## Three layers
 
