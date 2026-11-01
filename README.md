@@ -29,9 +29,17 @@ make kubeconfig                      # both clusters into your kubeconfig
 # 2. Observability stack (obs cluster)
 cd ../observability && make all DOMAIN=lab.example.com
 
-# 3. BankObs (bankobs cluster)
-cd ../app && make all DOMAIN=lab.example.com
+# 3. BankObs (bankobs cluster) — LICENSE_KEY is required (the app images gate on it)
+cd ../app && make all DOMAIN=lab.example.com LICENSE_KEY=eyJ...
 ```
+
+> **`LICENSE_KEY` is required** for step 3 — every bankobs Java service calls `license-checker`
+> on boot and refuses to start without a valid license. Pass it inline (above) or drop
+> `LICENSE_KEY=eyJ...` into `app/.env` (git-ignored). Telemetry still flows without it, but the
+> services won't come up.
+>
+> **Oracle** (`oracle-0`) takes ~5-10 min on first boot (datafile creation); the few core-banking
+> services that depend on it stay down until it's ready. Everything else comes up in a couple of minutes.
 
 Then: `https://grafana.lab.example.com` (single pane), `https://bankobs.lab.example.com` (app),
 and fault injection via `kubectl -n bankobs scale deploy/fault-injector --replicas=1`.
