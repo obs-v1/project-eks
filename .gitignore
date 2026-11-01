@@ -9,3 +9,7 @@ terraform.tfvars
 *.auto.tfvars
 override.tf
 override.tf.json
+
+# Secrets — never commit a license key
+.env
+**/.env

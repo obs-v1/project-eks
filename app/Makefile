@@ -1,14 +1,15 @@
 # ─────────────────────────────────────────────────────────────────────────────
 #  project-eks/app — BankObs on the bankobs EKS cluster
 #
-#  make all                 # platform (DBs/web-portal) + all 60 service charts + frontend ingress
-#  make platform            # databases, license-checker, web-portal, init jobs (StatefulSets)
-#  make services            # helm upgrade --install every service, one after another (no wait)
-#  make frontend DOMAIN=…   # expose web-portal at bankobs.<DOMAIN> via Traefik
-#  make -C <service> deploy # a single service on its own (build/push/deploy live in each folder)
-#  make regen               # re-stamp the per-service charts from _generate.sh
+#  make all LICENSE_KEY=…      # license secret + platform + all 60 service charts + frontend
+#  make license LICENSE_KEY=…  # just the bankobs-license secret the app images require
+#  make platform              # databases, license-checker, web-portal, init jobs (StatefulSets)
+#  make services              # helm upgrade --install every service, one after another (no wait)
+#  make frontend DOMAIN=…     # expose web-portal at bankobs.<DOMAIN> via Traefik
+#  make -C <service> deploy   # a single service on its own (build/push/deploy live in each folder)
+#  make regen                 # re-stamp the per-service charts from _generate.sh
 #
-#  Inputs:  CTX (kube context, default obs-v1-bankobs) · ECR · TAG · DOMAIN · NS (default bankobs)
+#  Inputs:  LICENSE_KEY (required; inline or in a local .env) · CTX · ECR · TAG · DOMAIN · NS
 # ─────────────────────────────────────────────────────────────────────────────
 NS     ?= bankobs
 CTX    ?= obs-v1-bankobs
@@ -16,18 +17,38 @@ ECR    ?= public.ecr.aws/w8x4g9h7/obs-v1
 TAG    ?= 1.0.0
 DOMAIN ?=
 
+# License for the bankobs app images — license-checker validates it and EVERY Java service
+# refuses to start until it does. Pass inline (make all LICENSE_KEY=eyJ...) or drop
+# LICENSE_KEY=eyJ... into a local .env file. HOST_* are optional (the test key is hw-wildcard).
+LICENSE_KEY     ?= $(shell grep '^LICENSE_KEY=' .env 2>/dev/null | cut -d= -f2-)
+HOST_MACHINE_ID ?=
+HOST_MAC        ?=
+HOST_HOSTNAME   ?=
+
 K = kubectl --context $(CTX)
 
 # Every folder that is a service chart (has a Chart.yaml) — platform/ has none.
 SERVICES := $(patsubst %/Chart.yaml,%,$(wildcard */Chart.yaml))
 
-.PHONY: all namespace platform services frontend list regen destroy
+.PHONY: all namespace license configmaps platform services frontend list regen destroy
 
 all: namespace platform services frontend
 	@echo ""; echo "  ✓ BankObs deployed to context $(CTX) ($(words $(SERVICES)) services + platform)."
 
 namespace:
 	$(K) create namespace $(NS) --dry-run=client -o yaml | $(K) apply -f -
+
+# The license secret every bankobs app image requires. license-checker validates it; the Java
+# services call license-checker on boot and refuse to start until it says OK.
+license: namespace
+	@test -n "$(LICENSE_KEY)" || { echo "ERROR: LICENSE_KEY is empty. Pass it: make all LICENSE_KEY=eyJ...  (or put LICENSE_KEY=... in ./.env)"; exit 1; }
+	@$(K) create secret generic bankobs-license \
+	  --from-literal=LICENSE_KEY='$(LICENSE_KEY)' \
+	  --from-literal=HOST_MACHINE_ID='$(HOST_MACHINE_ID)' \
+	  --from-literal=HOST_MAC='$(HOST_MAC)' \
+	  --from-literal=HOST_HOSTNAME='$(HOST_HOSTNAME)' \
+	  -n $(NS) --dry-run=client -o yaml | $(K) apply -f -
+	@echo "  ✓ bankobs-license secret applied."
 
 # Init ConfigMaps the DB StatefulSets mount (built from platform/infrastructure/).
 configmaps: namespace
@@ -40,11 +61,10 @@ configmaps: namespace
 	$(K) create configmap rabbitmq-definitions   --from-file=platform/infrastructure/messaging/rabbitmq/definitions.json  -n $(NS) --dry-run=client -o yaml | $(K) apply -f -
 	$(K) create configmap redis-conf             --from-file=platform/infrastructure/databases/redis/redis.conf           -n $(NS) --dry-run=client -o yaml | $(K) apply -f -
 
-# StatefulSet databases + license-checker + web-portal + init jobs. The *.tpl ingress
-# is skipped here (kubectl ignores non-.yaml); it is applied by `make frontend`.
-# (A real LICENSE_KEY secret `bankobs-license` is needed only by license-checker:
-#   kubectl -n bankobs create secret generic bankobs-license --from-literal=LICENSE_KEY=... )
-platform: namespace configmaps
+# StatefulSet databases + license-checker + web-portal + init jobs. Needs the license secret
+# first (license-checker won't start without it). The *.tpl ingress is skipped here (kubectl
+# ignores non-.yaml); it is applied by `make frontend`.
+platform: namespace license configmaps
 	$(K) apply -n $(NS) -f platform/
 
 # Fire each chart in sequence; do NOT wait for pods (helm returns once resources are applied).
