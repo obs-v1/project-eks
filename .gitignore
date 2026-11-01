@@ -1,0 +1,11 @@
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+# Keep the lock file (reproducible providers); ignore local var/secret files
+terraform.tfvars
+*.auto.tfvars
+override.tf
+override.tf.json

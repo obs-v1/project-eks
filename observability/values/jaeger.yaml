@@ -1,0 +1,20 @@
+# Jaeger — all-in-one, in-memory (plenty for a teaching/demo stack). OTLP ingestion
+# is on by default in the chart; we don't re-set env (that caused duplicate-key errors).
+fullnameOverride: jaeger
+
+provisionDataStore:
+  cassandra: false
+  elasticsearch: false
+
+allInOne:
+  enabled: true
+  args:
+    - "--memory.max-traces=100000"
+
+storage:
+  type: memory
+
+# All-in-one serves collector + query + agent itself.
+collector: { enabled: false }
+query:     { enabled: false }
+agent:     { enabled: false }

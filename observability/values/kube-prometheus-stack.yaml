@@ -1,0 +1,94 @@
+# kube-prometheus-stack — Prometheus + Alertmanager + Grafana + node-exporter + kube-state.
+# Grafana ships pre-wired with all four correlation pivots (the heart of the course).
+fullnameOverride: kps
+
+# ── Prometheus ────────────────────────────────────────────────────────────────
+prometheus:
+  prometheusSpec:
+    # Receive the Collector's remote-write, and KEEP exemplars → the metric→trace pivot.
+    enableRemoteWriteReceiver: true
+    enableFeatures: ["exemplar-storage"]
+    retention: 7d
+    # Discover ServiceMonitors/Rules from any namespace, not just Helm-labeled ones.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 30Gi
+
+# ── Alertmanager ──────────────────────────────────────────────────────────────
+alertmanager:
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 5Gi
+
+# ── Grafana ───────────────────────────────────────────────────────────────────
+grafana:
+  adminPassword: admin
+  persistence:
+    enabled: true
+    storageClassName: gp3
+    size: 5Gi
+  # Turn OFF the chart's auto Prometheus datasource so we can define it ourselves
+  # WITH the exemplar wiring.
+  sidecar:
+    datasources:
+      defaultDatasourceEnabled: false
+  additionalDataSources:
+    - name: Prometheus
+      uid: prometheus
+      type: prometheus
+      access: proxy
+      url: http://kps-prometheus:9090
+      isDefault: true
+      jsonData:
+        exemplarTraceIdDestinations:
+          - name: trace_id
+            datasourceUid: jaeger
+    - name: Loki
+      uid: loki
+      type: loki
+      access: proxy
+      url: http://loki:3100
+      jsonData:
+        derivedFields:
+          - name: trace_id
+            matcherType: label
+            matcherRegex: trace_id
+            datasourceUid: jaeger
+            url: "${__value.raw}"
+    - name: Jaeger
+      uid: jaeger
+      type: jaeger
+      access: proxy
+      url: http://jaeger-query:16686
+      jsonData:
+        tracesToLogsV2:
+          datasourceUid: loki
+          spanStartTimeShift: "-5m"
+          spanEndTimeShift: "5m"
+          filterByTraceID: true
+          tags:
+            - { key: "service.name", value: "service_name" }
+        tracesToProfiles:
+          datasourceUid: pyroscope
+          profileTypeId: "process_cpu:cpu:nanoseconds:cpu:nanoseconds"
+          tags:
+            - { key: "service.name", value: "service_name" }
+    - name: Pyroscope
+      uid: pyroscope
+      type: grafana-pyroscope-datasource
+      access: proxy
+      url: http://pyroscope:4040
