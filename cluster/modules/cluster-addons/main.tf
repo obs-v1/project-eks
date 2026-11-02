@@ -100,6 +100,15 @@ resource "helm_release" "traefik" {
         http = { tls = { enabled = false } }
       }
     }
+    # Redirect all plain HTTP (:80 → web entrypoint) to HTTPS. We target ":443" explicitly
+    # rather than the websecure entrypoint, because TLS terminates at the NLB: Traefik's
+    # websecure entrypoint listens on 8443 internally, so a redirect "to websecure" would
+    # emit https://host:8443. ":443" makes the Location a clean https://host (443 = default).
+    additionalArguments = [
+      "--entrypoints.web.http.redirections.entrypoint.to=:443",
+      "--entrypoints.web.http.redirections.entrypoint.scheme=https",
+      "--entrypoints.web.http.redirections.entrypoint.permanent=true",
+    ]
     ingressClass = {
       enabled        = true
       isDefaultClass = true
