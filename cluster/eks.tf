@@ -16,6 +16,19 @@ module "eks_observability" {
   enable_cluster_creator_admin_permissions = true
   authentication_mode                      = "API_AND_CONFIG_MAP"
 
+  # Grant cluster-admin to any extra principals (e.g. the EC2 instance role running `make apply`).
+  access_entries = {
+    for arn in var.cluster_admin_arns : arn => {
+      principal_arn = arn
+      policy_associations = {
+        admin = {
+          policy_arn   = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+          access_scope = { type = "cluster" }
+        }
+      }
+    }
+  }
+
   vpc_id     = module.vpc_observability.vpc_id
   subnet_ids = module.vpc_observability.private_subnets
 
@@ -55,6 +68,19 @@ module "eks_bankobs" {
   enable_irsa                              = true
   enable_cluster_creator_admin_permissions = true
   authentication_mode                      = "API_AND_CONFIG_MAP"
+
+  # Grant cluster-admin to any extra principals (e.g. the EC2 instance role running `make apply`).
+  access_entries = {
+    for arn in var.cluster_admin_arns : arn => {
+      principal_arn = arn
+      policy_associations = {
+        admin = {
+          policy_arn   = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+          access_scope = { type = "cluster" }
+        }
+      }
+    }
+  }
 
   vpc_id     = module.vpc_bankobs.vpc_id
   subnet_ids = module.vpc_bankobs.private_subnets

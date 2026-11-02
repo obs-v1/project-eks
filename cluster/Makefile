@@ -19,6 +19,12 @@ endif
 ifdef ACM_ARN
 export TF_VAR_acm_certificate_arn = $(ACM_ARN)
 endif
+# ADMIN_ARN: grant cluster-admin to an extra principal (the role running apply, e.g. an EC2
+# instance role). Needed when not applying as an interactive SSO/user principal.
+#   make apply ... ADMIN_ARN=arn:aws:iam::<acct>:role/workstation
+ifdef ADMIN_ARN
+export TF_VAR_cluster_admin_arns = ["$(ADMIN_ARN)"]
+endif
 export TF_VAR_aws_region = $(REGION)
 
 .PHONY: init plan apply destroy fmt validate kubeconfig output
@@ -37,6 +43,7 @@ plan: init
 
 apply: init
 	terraform apply -auto-approve
+	@$(MAKE) kubeconfig     # point kubectl at both clusters so the obs/app deploys work right away
 
 destroy:
 	terraform destroy -auto-approve

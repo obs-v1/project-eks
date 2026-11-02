@@ -52,6 +52,17 @@ variable "private_dns_domain" {
   default     = "obs.internal"
 }
 
+variable "cluster_admin_arns" {
+  description = <<-EOT
+    Extra IAM principal ARNs to grant cluster-admin on BOTH clusters (role ARNs, not session ARNs).
+    enable_cluster_creator_admin_permissions covers an interactive SSO/user principal, but an EC2
+    instance role running `make apply` is a session ARN that EKS access entries don't match — so
+    pass the role here, e.g. ["arn:aws:iam::<acct>:role/workstation"].
+  EOT
+  type        = list(string)
+  default     = []
+}
+
 variable "public_api_access_cidrs" {
   description = "CIDRs allowed to reach the (public) EKS API server. Default: anywhere, so you can kubectl from any laptop."
   type        = list(string)

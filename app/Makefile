@@ -16,6 +16,7 @@ CTX    ?= obs-v1-bankobs
 ECR    ?= public.ecr.aws/w8x4g9h7/obs-v1
 TAG    ?= 1.0.0
 DOMAIN ?=
+REGION ?= us-east-1
 
 # License for the bankobs app images — license-checker validates it and EVERY Java service
 # refuses to start until it does. Pass inline (make all LICENSE_KEY=eyJ...) or drop
@@ -30,12 +31,16 @@ K = kubectl --context $(CTX)
 # Every folder that is a service chart (has a Chart.yaml) — platform/ has none.
 SERVICES := $(patsubst %/Chart.yaml,%,$(wildcard */Chart.yaml))
 
-.PHONY: all namespace license configmaps platform services frontend list regen destroy
+.PHONY: all ensure-context namespace license configmaps platform services frontend list regen destroy
+
+# Create the kube context if it's missing (alias == cluster name == CTX).
+ensure-context:
+	@kubectl config get-contexts $(CTX) >/dev/null 2>&1 || aws eks update-kubeconfig --region $(REGION) --name $(CTX) --alias $(CTX) >/dev/null
 
 all: namespace platform services frontend
 	@echo ""; echo "  ✓ BankObs deployed to context $(CTX) ($(words $(SERVICES)) services + platform)."
 
-namespace:
+namespace: ensure-context
 	$(K) create namespace $(NS) --dry-run=client -o yaml | $(K) apply -f -
 
 # The license secret every bankobs app image requires. license-checker validates it; the Java

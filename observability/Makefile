@@ -14,6 +14,7 @@ NS             ?= monitoring
 CONTEXT        ?= obs-v1-observability
 COLLECTOR_HOST ?= otel-collector.obs.internal
 DOMAIN         ?=
+REGION         ?= us-east-1
 
 H  = helm --kube-context $(CONTEXT) upgrade --install
 K  = kubectl --context $(CONTEXT)
@@ -21,11 +22,12 @@ HN = -n $(NS)
 
 AGENT_CTX ?= obs-v1-bankobs   # the agent runs IN the bankobs cluster
 
-.PHONY: repos namespace all otel-collector kube-prometheus-stack loki jaeger pyroscope pyrra ingress collector-lb agent destroy
+.PHONY: repos ensure-context namespace all otel-collector kube-prometheus-stack loki jaeger pyroscope pyrra ingress collector-lb agent destroy
 
 # Collector agent in the BANKOBS cluster: scrapes /metrics + tails logs locally and forwards
 # them by OTLP to the central collector across the peering. (Deploy after the obs stack.)
 agent: repos
+	@kubectl config get-contexts $(AGENT_CTX) >/dev/null 2>&1 || aws eks update-kubeconfig --region $(REGION) --name $(AGENT_CTX) --alias $(AGENT_CTX) >/dev/null
 	helm --kube-context $(AGENT_CTX) upgrade --install bankobs-agent open-telemetry/opentelemetry-collector \
 	  --version 0.178.1 -n monitoring --create-namespace -f agent/values-agent.yaml
 	@echo "  ✓ bankobs-agent deployed to $(AGENT_CTX) (metrics scrape + logs tail → obs collector)."
@@ -37,7 +39,12 @@ repos:
 	helm repo add jaegertracing https://jaegertracing.github.io/helm-charts
 	helm repo update
 
-namespace:
+# Create the kube context if it's missing, so you don't have to run `make -C ../cluster
+# kubeconfig` first. The alias == cluster name == CONTEXT.
+ensure-context:
+	@kubectl config get-contexts $(CONTEXT) >/dev/null 2>&1 || aws eks update-kubeconfig --region $(REGION) --name $(CONTEXT) --alias $(CONTEXT) >/dev/null
+
+namespace: ensure-context
 	$(K) create namespace $(NS) --dry-run=client -o yaml | $(K) apply -f -
 
 # Order: Prometheus Operator CRDs first (kps), then backends, then collector, then pyrra, then edges.
