@@ -39,14 +39,16 @@ module "addons_bankobs" {
 
 # ── Cluster-autoscaler ASG discovery tags ────────────────────────────────────
 # Managed node group ASGs are not auto-tagged for CA discovery, so tag them.
+# An EKS managed node group is always exactly ONE ASG, so we reference [0] directly.
+# (A for_each over these names fails to plan on a fresh apply — the names are only
+#  known after the clusters exist; an unknown attribute VALUE is fine, unknown keys aren't.)
 locals {
-  obs_asg_names     = module.eks_observability.eks_managed_node_groups_autoscaling_group_names
-  bankobs_asg_names = module.eks_bankobs.eks_managed_node_groups_autoscaling_group_names
+  obs_asg_name     = module.eks_observability.eks_managed_node_groups_autoscaling_group_names[0]
+  bankobs_asg_name = module.eks_bankobs.eks_managed_node_groups_autoscaling_group_names[0]
 }
 
 resource "aws_autoscaling_group_tag" "obs_ca_enabled" {
-  for_each               = toset(local.obs_asg_names)
-  autoscaling_group_name = each.value
+  autoscaling_group_name = local.obs_asg_name
   tag {
     key                 = "k8s.io/cluster-autoscaler/enabled"
     value               = "true"
@@ -55,8 +57,7 @@ resource "aws_autoscaling_group_tag" "obs_ca_enabled" {
 }
 
 resource "aws_autoscaling_group_tag" "obs_ca_cluster" {
-  for_each               = toset(local.obs_asg_names)
-  autoscaling_group_name = each.value
+  autoscaling_group_name = local.obs_asg_name
   tag {
     key                 = "k8s.io/cluster-autoscaler/${local.obs_cluster_name}"
     value               = "owned"
@@ -65,8 +66,7 @@ resource "aws_autoscaling_group_tag" "obs_ca_cluster" {
 }
 
 resource "aws_autoscaling_group_tag" "bankobs_ca_enabled" {
-  for_each               = toset(local.bankobs_asg_names)
-  autoscaling_group_name = each.value
+  autoscaling_group_name = local.bankobs_asg_name
   tag {
     key                 = "k8s.io/cluster-autoscaler/enabled"
     value               = "true"
@@ -75,8 +75,7 @@ resource "aws_autoscaling_group_tag" "bankobs_ca_enabled" {
 }
 
 resource "aws_autoscaling_group_tag" "bankobs_ca_cluster" {
-  for_each               = toset(local.bankobs_asg_names)
-  autoscaling_group_name = each.value
+  autoscaling_group_name = local.bankobs_asg_name
   tag {
     key                 = "k8s.io/cluster-autoscaler/${local.bankobs_cluster_name}"
     value               = "owned"
