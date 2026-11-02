@@ -47,9 +47,10 @@ ensure-context:
 namespace: ensure-context
 	$(K) create namespace $(NS) --dry-run=client -o yaml | $(K) apply -f -
 
-# Order: Prometheus Operator CRDs first (kps), then backends, then collector, then pyrra, then edges.
-all: repos namespace kube-prometheus-stack loki jaeger pyroscope otel-collector pyrra collector-lb ingress
-	@echo ""; echo "  ✓ observability stack deployed to context $(CONTEXT)."
+# Order: Prometheus Operator CRDs first (kps), then backends, then collector, then pyrra, then
+# edges, then the agent in the bankobs cluster (scrapes bankobs → forwards to this collector).
+all: repos namespace kube-prometheus-stack loki jaeger pyroscope otel-collector pyrra collector-lb ingress agent
+	@echo ""; echo "  ✓ observability stack deployed to $(CONTEXT) + agent to $(AGENT_CTX)."
 
 kube-prometheus-stack: namespace
 	$(H) kps prometheus-community/kube-prometheus-stack --version 92.17.0 $(HN) \

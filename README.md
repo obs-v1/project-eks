@@ -27,7 +27,8 @@ make apply ZONE_ID=Z0123... DOMAIN=lab.example.com ACM_ARN=arn:aws:acm:us-east-1
 make kubeconfig                      # both clusters into your kubeconfig
 
 # 2. Observability stack (obs cluster)
-cd ../observability && make all DOMAIN=lab.example.com
+cd ../observability && make all DOMAIN=lab.example.com 
+
 
 # 3. BankObs (bankobs cluster) — LICENSE_KEY is required (the app images gate on it)
 cd ../app && make all DOMAIN=lab.example.com LICENSE_KEY=eyJ...

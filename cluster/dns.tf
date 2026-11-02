@@ -5,6 +5,11 @@
 resource "aws_route53_zone" "private" {
   name = var.private_dns_domain
 
+  # external-dns writes an otel-collector.<domain> record in here that it never deletes
+  # (it runs --policy=upsert-only), so without this `terraform destroy` fails on the zone
+  # with HostedZoneNotEmpty. force_destroy lets Terraform purge the records first.
+  force_destroy = true
+
   vpc {
     vpc_id = module.vpc_observability.vpc_id
   }
