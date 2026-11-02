@@ -62,8 +62,14 @@ destroy: clean-lbs
 	   if [ "$$n" = "0" ] && [ "$$m" = "0" ]; then echo "  ✓ no load balancers left in either VPC"; break; fi; \
 	   echo "  still present: $$n NLB(v2) + $$m classic ELB — retry $$i/36"; sleep 10; \
 	 done
-	terraform destroy -auto-approve
-	@echo "  ✓ clusters, VPCs, peering and private zone destroyed."
+	@OBS=$$(terraform output -raw observability_cluster_name 2>/dev/null); \
+	 BNK=$$(terraform output -raw bankobs_cluster_name 2>/dev/null); \
+	 terraform destroy -auto-approve && { \
+	   echo "  removing EKS control-plane log groups (EKS-owned, not in TF state)..."; \
+	   aws logs delete-log-group --region $(REGION) --log-group-name /aws/eks/$$OBS/cluster 2>/dev/null || true; \
+	   aws logs delete-log-group --region $(REGION) --log-group-name /aws/eks/$$BNK/cluster 2>/dev/null || true; \
+	 }
+	@echo "  ✓ clusters, VPCs, peering, private zone and log groups destroyed."
 	@echo "  NOTE: terraform does NOT remove EBS volumes left by StatefulSet PVCs, or the"
 	@echo "        public DNS records external-dns created (upsert-only never deletes)."
 	@echo "        Delete those by hand if you want a spotless account / zone."

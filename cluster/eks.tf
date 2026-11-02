@@ -6,6 +6,12 @@ module "eks_observability" {
   name               = local.obs_cluster_name
   kubernetes_version = var.eks_version
 
+  # Let EKS own the /aws/eks/<name>/cluster log group instead of Terraform. EKS creates it
+  # automatically when control-plane logging is on, so a re-apply after a prior/partial run
+  # never collides with a leftover group (ResourceAlreadyExistsException). `make destroy`
+  # removes it explicitly, since EKS does not delete it on cluster teardown.
+  create_cloudwatch_log_group = false
+
   # Public API so you can kubectl from anywhere; private access on too, for the
   # in-VPC/peered paths.
   endpoint_public_access       = true
@@ -60,6 +66,9 @@ module "eks_bankobs" {
 
   name               = local.bankobs_cluster_name
   kubernetes_version = var.eks_version
+
+  # Let EKS own the /aws/eks/<name>/cluster log group (see the observability cluster above).
+  create_cloudwatch_log_group = false
 
   endpoint_public_access       = true
   endpoint_public_access_cidrs = var.public_api_access_cidrs
