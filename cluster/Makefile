@@ -64,15 +64,25 @@ destroy: clean-lbs
 	 done
 	@OBS=$$(terraform output -raw observability_cluster_name 2>/dev/null); \
 	 BNK=$$(terraform output -raw bankobs_cluster_name 2>/dev/null); \
+	 ZID=$$(terraform output -raw public_hosted_zone_id 2>/dev/null); \
 	 terraform destroy -auto-approve && { \
 	   echo "  removing EKS control-plane log groups (EKS-owned, not in TF state)..."; \
 	   aws logs delete-log-group --region $(REGION) --log-group-name /aws/eks/$$OBS/cluster 2>/dev/null || true; \
 	   aws logs delete-log-group --region $(REGION) --log-group-name /aws/eks/$$BNK/cluster 2>/dev/null || true; \
+	   echo "  removing external-dns records from the public zone (upsert-only never deletes them)..."; \
+	   python3 scripts/cleanup-external-dns-records.py --zone-id "$$ZID" --owner "$$OBS" --owner "$$BNK" || true; \
+	   echo "  removing orphaned EBS volumes tagged for these clusters..."; \
+	   for c in "$$OBS" "$$BNK"; do \
+	     for v in $$(aws ec2 describe-volumes --region $(REGION) --filters Name=status,Values=available Name=tag:ebs-owner-cluster,Values=$$c --query "Volumes[].VolumeId" --output text 2>/dev/null); do \
+	       echo "    - deleting volume $$v ($$c)"; aws ec2 delete-volume --region $(REGION) --volume-id $$v 2>/dev/null || true; \
+	     done; \
+	   done; \
 	 }
-	@echo "  ✓ clusters, VPCs, peering, private zone and log groups destroyed."
-	@echo "  NOTE: terraform does NOT remove EBS volumes left by StatefulSet PVCs, or the"
-	@echo "        public DNS records external-dns created (upsert-only never deletes)."
-	@echo "        Delete those by hand if you want a spotless account / zone."
+	@echo "  ✓ clusters, VPCs, peering, private zone, log groups, DNS records and EBS volumes destroyed."
+	@echo "  NOTE: EBS cleanup covers volumes tagged ebs-owner-cluster=<cluster> — i.e. every PV"
+	@echo "        volume provisioned once this storageclass change is live. Volumes created"
+	@echo "        BEFORE it carry no such tag; list any stragglers with:"
+	@echo "        aws ec2 describe-volumes --filters Name=status,Values=available --query 'Volumes[].VolumeId'"
 
 # Delete every type=LoadBalancer Service in both clusters so the AWS cloud provider
 # tears down their NLBs/ELBs (and the ENIs/SG rules that would block VPC deletion).

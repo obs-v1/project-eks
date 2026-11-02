@@ -21,6 +21,11 @@ resource "kubernetes_storage_class_v1" "gp3" {
   parameters = {
     type   = "gp3"
     fsType = "ext4"
+    # Stamp every provisioned volume with the cluster name so `make destroy` can find and
+    # delete the ones left "available" after the cluster is gone (dynamically-provisioned
+    # PV volumes are not Terraform-managed, and EBS is AZ- not VPC-scoped, so this tag is
+    # the only safe way to scope the cleanup to just this cluster's volumes).
+    tagSpecification_1 = "ebs-owner-cluster=${var.cluster_name}"
   }
   depends_on = [aws_eks_addon.ebs_csi]
 }

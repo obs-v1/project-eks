@@ -6,6 +6,12 @@ output "observability_cluster_name" {
   value = module.eks_observability.cluster_name
 }
 
+# Stored in state so `make destroy` can clean external-dns records out of the public zone
+# even when ZONE_ID isn't passed on the destroy command.
+output "public_hosted_zone_id" {
+  value = var.public_hosted_zone_id
+}
+
 output "bankobs_cluster_name" {
   value = module.eks_bankobs.cluster_name
 }
