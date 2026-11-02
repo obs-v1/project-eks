@@ -95,7 +95,9 @@ resource "helm_release" "traefik" {
       websecure = {
         port        = 8443
         exposedPort = 443
-        tls         = { enabled = false }
+        # traefik 42: TLS on an entrypoint lives under http.tls (was ports.websecure.tls).
+        # Disabled because the NLB terminates TLS (ACM) and forwards plain HTTP.
+        http = { tls = { enabled = false } }
       }
     }
     ingressClass = {

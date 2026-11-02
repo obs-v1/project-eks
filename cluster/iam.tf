@@ -9,6 +9,8 @@ module "irsa_obs_ebs_csi" {
   version = "~> 6.0"
 
   name                  = "${local.obs_cluster_name}-ebs-csi"
+  policy_name           = "${local.obs_cluster_name}-ebs-csi"
+  use_name_prefix       = false
   attach_ebs_csi_policy = true
   oidc_providers = {
     main = {
@@ -24,6 +26,8 @@ module "irsa_obs_external_dns" {
   version = "~> 6.0"
 
   name                          = "${local.obs_cluster_name}-external-dns"
+  policy_name                   = "${local.obs_cluster_name}-external-dns"
+  use_name_prefix               = false
   attach_external_dns_policy    = true
   external_dns_hosted_zone_arns = [local.public_zone_arn, local.private_zone_arn] # UIs + private collector
   oidc_providers = {
@@ -40,6 +44,8 @@ module "irsa_obs_autoscaler" {
   version = "~> 6.0"
 
   name                             = "${local.obs_cluster_name}-cluster-autoscaler"
+  policy_name                      = "${local.obs_cluster_name}-cluster-autoscaler"
+  use_name_prefix                  = false
   attach_cluster_autoscaler_policy = true
   cluster_autoscaler_cluster_names = [local.obs_cluster_name]
   oidc_providers = {
@@ -57,6 +63,8 @@ module "irsa_bankobs_ebs_csi" {
   version = "~> 6.0"
 
   name                  = "${local.bankobs_cluster_name}-ebs-csi"
+  policy_name           = "${local.bankobs_cluster_name}-ebs-csi"
+  use_name_prefix       = false
   attach_ebs_csi_policy = true
   oidc_providers = {
     main = {
@@ -72,6 +80,8 @@ module "irsa_bankobs_external_dns" {
   version = "~> 6.0"
 
   name                          = "${local.bankobs_cluster_name}-external-dns"
+  policy_name                   = "${local.bankobs_cluster_name}-external-dns"
+  use_name_prefix               = false
   attach_external_dns_policy    = true
   external_dns_hosted_zone_arns = [local.public_zone_arn] # bankobs.<domain> only
   oidc_providers = {
@@ -88,6 +98,8 @@ module "irsa_bankobs_autoscaler" {
   version = "~> 6.0"
 
   name                             = "${local.bankobs_cluster_name}-cluster-autoscaler"
+  policy_name                      = "${local.bankobs_cluster_name}-cluster-autoscaler"
+  use_name_prefix                  = false
   attach_cluster_autoscaler_policy = true
   cluster_autoscaler_cluster_names = [local.bankobs_cluster_name]
   oidc_providers = {
