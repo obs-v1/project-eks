@@ -37,6 +37,15 @@ alertmanager:
 # ── Grafana ───────────────────────────────────────────────────────────────────
 grafana:
   adminPassword: admin
+  # Pin the NON-distroless Grafana image. The chart's default `<ver>-distroless` build uses the
+  # pure-Go modernc.org/sqlite driver, which silently skips the migration that adds the `uid`
+  # column to the `user` table — so on first boot Grafana runs all migrations, then crashes with
+  # "failed to create admin user: no such column: uid" and never comes up (503 at the ingress).
+  # The standard image (CGO mattn/go-sqlite3) applies that migration correctly. Same version,
+  # just the non-distroless build; keep the tag in step with the chart's Grafana appVersion.
+  image:
+    repository: grafana/grafana
+    tag: "13.3.0"
   persistence:
     enabled: true
     storageClassName: gp3
