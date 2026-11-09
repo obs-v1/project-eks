@@ -26,6 +26,11 @@ export const options = {
 const CUST = __ENV.CUST || 'CUST-00000001';
 const PASS = __ENV.PASS || 'Training@123';
 const PAGES = ['/dashboard', '/cards', '/loans', '/transactions', '/pay'];
+// Payer + payees MUST be VPAs seeded in the vpa_registry that resolve to real Oracle accounts,
+// else the credit leg 500s and the payment 502s (a data error, not load). These are the demo
+// beneficiaries the web-portal pay page shows — see app/.../cassandra/init-scripts/02-seed.cql.
+const FROM_VPA = __ENV.FROM_VPA || 'cust00000001@bankobs';
+const PAYEES = ['demo@okaxis', 'demo@okhdfc', 'demo@okicici', 'demo@oksbi', 'priya.s@okhdfc', 'cust00000002@bankobs'];
 
 function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
 
@@ -53,11 +58,12 @@ export default function () {
   // 3) sometimes send a UPI payment (full payment chain; best-effort — may fail under a fault)
   if (Math.random() < PAY_PROB) {
     const amt = Math.floor(Math.random() * 500) + 10;
-    http.post(
+    const pay = http.post(
       `${BASE}/api/upi/pay`,
-      JSON.stringify({ from_vpa: 'user1@ybl', to_vpa: pick(['store@paytm', 'merchant@okaxis', 'shop@okhdfcbank']), amount: amt }),
+      JSON.stringify({ from_vpa: FROM_VPA, to_vpa: pick(PAYEES), amount: amt }),
       { headers: { 'Content-Type': 'application/json' }, tags: { name: 'upi_pay' }, timeout: '15s' },
     );
+    check(pay, { 'pay 200': (r) => r.status === 200 }) || journeyErrors.add(1);
   }
   sleep(Math.random() * 0.8 + 0.2);
 }
