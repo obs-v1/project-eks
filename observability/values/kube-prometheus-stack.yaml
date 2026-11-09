@@ -82,7 +82,9 @@ grafana:
       uid: jaeger
       type: jaeger
       access: proxy
-      url: http://jaeger:16686/jaeger
+      # Base endpoint only — NO trailing path. Jaeger v2 serves the UI at / and the query API at
+      # root (/api/v3/*); there is no /jaeger base path. (Grafana Jaeger ds docs require the base URL.)
+      url: http://jaeger:16686
       jsonData:
         tracesToLogsV2:
           datasourceUid: loki
