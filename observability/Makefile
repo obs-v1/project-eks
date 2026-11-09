@@ -22,7 +22,7 @@ HN = -n $(NS)
 
 AGENT_CTX ?= obs-v1-bankobs   # the agent runs IN the bankobs cluster
 
-.PHONY: repos ensure-context namespace all otel-collector kube-prometheus-stack loki jaeger pyroscope pyrra ingress collector-lb agent destroy
+.PHONY: repos ensure-context namespace all otel-collector kube-prometheus-stack loki jaeger pyroscope pyrra ingress collector-lb dashboards agent destroy
 
 # Collector agent in the BANKOBS cluster: scrapes /metrics + tails logs locally and forwards
 # them by OTLP to the central collector across the peering. (Deploy after the obs stack.)
@@ -49,12 +49,19 @@ namespace: ensure-context
 
 # Order: Prometheus Operator CRDs first (kps), then backends, then collector, then pyrra, then
 # edges, then the agent in the bankobs cluster (scrapes bankobs → forwards to this collector).
-all: repos namespace kube-prometheus-stack loki jaeger pyroscope otel-collector pyrra collector-lb ingress agent
+all: repos namespace kube-prometheus-stack loki jaeger pyroscope otel-collector pyrra collector-lb ingress dashboards agent
 	@echo ""; echo "  ✓ observability stack deployed to $(CONTEXT) + agent to $(AGENT_CTX)."
 
 kube-prometheus-stack: namespace
 	$(H) kps prometheus-community/kube-prometheus-stack --version 92.17.0 $(HN) \
 	  -f values/kube-prometheus-stack.yaml --wait --timeout 15m
+
+# BankObs dashboards: ConfigMaps (label grafana_dashboard=1) that the kps Grafana sidecar
+# auto-loads into the "BankObs" folder. kubectl reads only *.yaml/*.yml/*.json from the dir,
+# so DASHBOARD-PROMPTS.md is ignored. Needs kps (Grafana + sidecar) deployed first.
+dashboards: namespace
+	$(K) apply -f dashboards/
+	@echo "  ✓ BankObs dashboards applied (sidecar loads them into Grafana → BankObs folder)."
 
 loki: namespace
 	$(H) loki grafana/loki --version 7.5.0 $(HN) -f values/loki.yaml
