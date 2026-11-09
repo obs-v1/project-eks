@@ -1,23 +1,34 @@
-# BankObs dashboard-generation prompts (tested & grounded on the live stack, 2026-11-08)
+# BankObs dashboard-generation prompts (tested & grounded on the live stack, updated 2026-11-09)
 
 These are tuned against the real `project-eks` stack, not assumptions. Paste **SHARED CONTEXT**
 once at the start of the agent session, then feed the dashboard prompts one at a time.
 
+> **UPDATE 2026-11-09 — BankObs now HAS Prometheus RED metrics.** The OTel Collector runs a
+> **`spanmetrics` connector** (`observability/values/otel-collector.yaml`): every BankObs span is
+> turned into `calls_total` + `duration_milliseconds` per `service_name`, remote-written to
+> Prometheus **with `trace_id` exemplars**. So you can now build real metric dashboards for
+> BankObs and start an investigation from a metric (the grafana→metric→trace→log path). The
+> reference board is `observability/dashboards/bankobs-red-spanmetrics.yaml`. The notes below that
+> say "bankobs has no metrics / no histograms" are superseded — read them as "no *scraped app*
+> metrics (no `/metrics`, no kube-state/cAdvisor for bankobs); RED comes from spanmetrics."
+
 ## What live testing established (the facts every prompt is grounded in)
 
-- **BankObs emits only LOGS + TRACES — no usable metrics.** BankObs runs in its own cluster, so
-  the observability Prometheus has only `target_info` for namespace `bankobs` (no app request/
-  latency/error metrics, no spanmetrics, and no kube-state-metrics/cAdvisor — those are per-cluster).
-  → **Per-service dashboards are Loki + Jaeger.** Prometheus dashboards cover only the **obs
-  cluster and the stack itself**. Do not build bankobs panels on Prometheus — they will be empty.
+- **BankObs app services expose no `/metrics` of their own** — no scraped app metrics, and the obs
+  Prometheus has no kube-state-metrics/cAdvisor for the bankobs cluster (those are per-cluster).
+  **BUT** the `spanmetrics` connector now derives per-service **RED metrics from traces**
+  (`calls_total`, `duration_milliseconds_*`, labels incl. `service_name`, `status_code`,
+  `http_status_code`, `span_kind`) **with exemplars** → Prometheus. So BankObs dashboards can be
+  **metric (RED) + Loki + Jaeger**, all three. Logs + traces are still the richest per-service
+  signal; use metrics for the golden-signal overview and the metric→trace exemplar jump.
 - **Datasource UIDs** (reference via datasource template vars, never hardcode): `prometheus`,
   `loki`, `jaeger`, `pyroscope`.
 - **Click-through is already wired at the datasource level** — panels inherit it, don't rebuild it:
   - log line → trace: Loki `derivedFields` on `trace_id` → Jaeger
   - trace → logs: Jaeger `tracesToLogsV2` → Loki (`filterByTraceID`, tag `service.name→service_name`)
   - trace → profiles: Jaeger `tracesToProfiles` → Pyroscope
-  - metric → trace: Prometheus exemplar `trace_id` → Jaeger (only obs-stack metrics have exemplars;
-    bankobs has no histograms)
+  - metric → trace: Prometheus exemplar `trace_id` → Jaeger — now works for **bankobs** too, via
+    the spanmetrics `duration_milliseconds_bucket` exemplars (verified live)
 - **Real Loki labels**: `service_name`, `service_namespace` (="bankobs"), `k8s_namespace_name`,
   `k8s_pod_name`, `k8s_deployment_name`, `k8s_container_name`, `detected_level`,
   `deployment_environment`. **Log level is NOT a selector label** — group by `detected_level`,
@@ -39,10 +50,12 @@ You generate Grafana dashboards for the project-eks observability lab. GROUND TR
 verified on the live stack — do not re-litigate, but DO verify your own queries return data):
 
 DATA REALITY
-- BankObs (the app, ~60 services in a SEPARATE cluster) emits only LOGS (Loki) and TRACES
-  (Jaeger). The obs Prometheus has NO bankobs app/infra metrics (only `target_info`). So every
-  BankObs dashboard is built on the Loki and Jaeger datasources. Prometheus is ONLY for obs-
-  cluster + stack dashboards. Never put a bankobs panel on Prometheus — it will be empty.
+- BankObs (the app, ~60 services in a SEPARATE cluster) pushes LOGS (Loki) and TRACES (Jaeger),
+  AND — via the Collector's spanmetrics connector — per-service RED METRICS to Prometheus
+  (`calls_total`, `duration_milliseconds_*`, with trace_id exemplars). So a BankObs dashboard can
+  use Prometheus (RED/golden signals, metric→trace exemplars), Loki (logs) and Jaeger (traces).
+  What BankObs still does NOT have in this Prometheus: scraped app `/metrics`, and kube-state/
+  cAdvisor for the bankobs cluster (node/pod CPU, mem, restarts) — those are per-cluster, obs only.
 - Datasource UIDs: prometheus, loki, jaeger, pyroscope. Reference them via datasource template
   variables (${ds_loki} etc.), never a hardcoded uid.
 
@@ -60,10 +73,21 @@ LOKI FACTS
 - Service dropdown variable: label_values({service_namespace="bankobs"}, service_name)
 - Rates use [$__rate_interval]; a "request rate" proxy for bankobs is log-line rate.
 
-PROMETHEUS FACTS (obs cluster + stack only)
-- Exists: node-exporter (node_*), kube-state-metrics (kube_*, label `namespace`), cAdvisor
-  (container_*), the obs components (label `service_name`), otelcol/collector + Loki + Prometheus
-  self-metrics, Pyrra recording rules. All describe the OBS cluster, not bankobs.
+PROMETHEUS FACTS
+- BankObs RED (from spanmetrics, these ARE per bankobs service):
+    calls_total{service_name, status_code, http_status_code, http_method, http_route, span_kind}
+    duration_milliseconds_bucket/_sum/_count{...same labels..., le}
+  For RED filter span_kind="SPAN_KIND_SERVER" (inbound). Error rate =
+    sum(rate(calls_total{service_name="$svc",status_code="STATUS_CODE_ERROR"}[$__rate_interval]))
+    / clamp_min(sum(rate(calls_total{service_name="$svc",span_kind="SPAN_KIND_SERVER"}[...])),0.001)
+  (or http_status_code=~"5.."). p95 =
+    histogram_quantile(0.95, sum by (le)(rate(duration_milliseconds_bucket{service_name="$svc",
+    span_kind="SPAN_KIND_SERVER"}[$__rate_interval]))). Service dropdown (metric side):
+    label_values(calls_total{span_kind="SPAN_KIND_SERVER"}, service_name). Exemplars: enable
+    "exemplar" on duration panels → trace_id → Jaeger.
+- OBS CLUSTER + STACK (not bankobs): node-exporter (node_*), kube-state-metrics (kube_*, label
+  `namespace`), cAdvisor (container_*), the obs components (label `service_name`), otelcol/collector
+  + Loki + Prometheus self-metrics, Pyrra recording rules.
 
 PROVISIONING
 - Output each dashboard as a ConfigMap in namespace `monitoring`, label `grafana_dashboard: "1"`,
@@ -84,7 +108,21 @@ dashboard per prompt; wait for each prompt.
 
 ---
 
-# GROUP A — BankObs dashboards (Loki + Jaeger). Every one has the click-through.
+# GROUP A — BankObs dashboards. Every one has the click-through.
+
+## PROMPT 0 — RED (spanmetrics)  [reference already built — the metric cockpit]
+```
+Build/refresh "BankObs — RED (spanmetrics)" on the Prometheus datasource — the board an operator
+opens FIRST and drills metric→trace→log from. Templated by $service
+(label_values(calls_total{span_kind="SPAN_KIND_SERVER"}, service_name)). Panels: request rate,
+error % (green/yellow/red at 1/5%), p95 & p99 latency stats; request-rate-by-status_code
+timeseries; a p50/p95/p99 latency timeseries WITH exemplars enabled (trace_id → Jaeger); a fleet
+"error rate by service" timeseries + a table ranked by error rate whose rows data-link to Jaeger;
+and — so the board also satisfies metric→trace→log on one screen — a Loki error-logs panel for
+$service (trace_id clickable). Use calls_total / duration_milliseconds_bucket, span_kind=
+"SPAN_KIND_SERVER". Folder "BankObs". A working version exists at
+observability/dashboards/bankobs-red-spanmetrics.yaml — treat it as the template to extend.
+```
 
 ## PROMPT 1 — Service Health (logs + traces)  [reference already built]
 ```
@@ -125,10 +163,11 @@ details enabled (trace_id → Jaeger). Add a `search` text variable piped into a
 Build "BankObs — Traces" on the Jaeger datasource. Panels: an embedded Jaeger trace-search panel
 (service variable from the Jaeger service list), a panel/notes for slowest and errored traces,
 and — crucially — a companion Loki logs panel for the same $service so a trace's trace_id and the
-logs line up on one screen (trace → logs via tracesToLogsV2, logs → trace via derived field). If
-the collector's spanmetrics connector is NOT enabled (it is not today), do NOT add Prometheus RED
-panels — state that trace-derived RED needs spanmetrics and leave it out. Variables: ds_jaeger,
-ds_loki, service. Folder "BankObs".
+logs line up on one screen (trace → logs via tracesToLogsV2, logs → trace via derived field).
+The collector's spanmetrics connector IS enabled now, so ALSO add a trace-derived RED row from
+Prometheus (request rate, error %, p95 from calls_total/duration_milliseconds_bucket for $service)
+with exemplars on the latency panel → Jaeger. Variables: ds_jaeger, ds_loki, ds_prom, service.
+Folder "BankObs".
 ```
 
 ## PROMPT 5 — Fleet Overview (log-derived golden signals)

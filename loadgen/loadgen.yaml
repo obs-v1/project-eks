@@ -1,0 +1,37 @@
+# BankObs load generator — k6 running the customer journey continuously, in-cluster.
+# The script comes from the loadgen-script ConfigMap (created from loadgen/journey.js).
+#   Start:  kubectl --context obs-v1-bankobs -n bankobs apply -f loadgen.yaml
+#   Scale:  kubectl --context obs-v1-bankobs -n bankobs set env deploy/loadgen VUS=20
+#   Watch:  kubectl --context obs-v1-bankobs -n bankobs logs -f deploy/loadgen
+#   Stop:   kubectl --context obs-v1-bankobs -n bankobs delete deploy loadgen
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loadgen
+  namespace: bankobs
+  labels: { app: loadgen, domain: loadgen }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: loadgen } }
+  template:
+    metadata:
+      labels: { app: loadgen }
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: k6
+          image: grafana/k6:0.49.0
+          args: ["run", "--quiet", "/scripts/journey.js"]
+          env:
+            - { name: BASE_URL, value: "http://web-portal:8200" }
+            - { name: VUS, value: "12" }
+            - { name: DURATION, value: "24h" }
+            - { name: PAY_PROB, value: "0.3" }
+          volumeMounts:
+            - { name: script, mountPath: /scripts }
+          resources:
+            requests: { cpu: 150m, memory: 192Mi }
+            limits:   { cpu: "1", memory: 512Mi }
+      volumes:
+        - name: script
+          configMap: { name: loadgen-script }

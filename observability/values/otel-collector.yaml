@@ -25,8 +25,8 @@ ports:
     protocol: TCP
 
 resources:
-  requests: { cpu: 100m, memory: 256Mi }
-  limits:   { cpu: "1",  memory: 512Mi }
+  requests: { cpu: 200m, memory: 384Mi }
+  limits:   { cpu: "1",  memory: 768Mi }
 
 config:
   receivers:
@@ -40,6 +40,25 @@ config:
       check_interval: 5s
       limit_percentage: 80
       spike_limit_percentage: 25
+  connectors:
+    # Derive per-service RED metrics (rate/errors/duration) from the traces BankObs
+    # already pushes — gives Grafana metric dashboards + exemplars for every service
+    # even though the apps expose no /metrics of their own.
+    spanmetrics:
+      histogram:
+        explicit:
+          buckets: [2ms, 5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s, 2s, 5s, 10s, 30s]
+      dimensions:
+        - name: http.method
+        - name: http.status_code
+        - name: http.route
+        - name: service.namespace
+      exemplars:
+        enabled: true
+      exclude_dimensions: []
+      metrics_flush_interval: 15s
+      metrics_expiration: 5m
+      namespace: ""
   exporters:
     otlp/jaeger:
       endpoint: jaeger:4317
@@ -47,11 +66,23 @@ config:
     prometheusremotewrite:
       endpoint: http://kps-prometheus:9090/api/v1/write
       tls: { insecure: true }
+      send_metadata: true
     otlphttp/loki:
       endpoint: http://loki:3100/otlp
       tls: { insecure: true }
   service:
     pipelines:
-      traces:  { receivers: [otlp], processors: [memory_limiter, batch], exporters: [otlp/jaeger] }
-      metrics: { receivers: [otlp], processors: [memory_limiter, batch], exporters: [prometheusremotewrite] }
-      logs:    { receivers: [otlp], processors: [memory_limiter, batch], exporters: [otlphttp/loki] }
+      # traces fan out to Jaeger AND into the spanmetrics connector
+      traces:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [otlp/jaeger, spanmetrics]
+      # metrics = whatever apps push (OTLP) PLUS the spanmetrics-derived RED series
+      metrics:
+        receivers: [otlp, spanmetrics]
+        processors: [memory_limiter, batch]
+        exporters: [prometheusremotewrite]
+      logs:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [otlphttp/loki]
