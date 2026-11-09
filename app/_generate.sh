@@ -145,10 +145,25 @@ spec:
           env:
             - { name: SERVICE_NAME, value: {{ .Chart.Name | quote }} }
             - { name: SERVICE_PORT, value: {{ .Values.service.port | quote }} }
+            {{- with .Values.configOverride }}
+            # A couple of published images ship a config file that fails to parse and
+            # crash-loops the pod. This env var points the JVM at the corrected copy
+            # mounted below from the {{ $.Chart.Name }}-config ConfigMap (image-free fix).
+            - { name: {{ .env.name }}, value: {{ .env.value | quote }} }
+            {{- end }}
           livenessProbe:  { httpGet: { path: /health/live,  port: {{ .Values.service.port }} }, initialDelaySeconds: 30 }
           readinessProbe: { httpGet: { path: /health/ready, port: {{ .Values.service.port }} }, initialDelaySeconds: 10 }
+          {{- with .Values.configOverride }}
+          volumeMounts:
+            - { name: config-override, mountPath: /config, readOnly: true }
+          {{- end }}
           resources:
 {{ toYaml .Values.resources | indent 12 }}
+      {{- with .Values.configOverride }}
+      volumes:
+        - name: config-override
+          configMap: { name: {{ $.Chart.Name }}-config }
+      {{- end }}
 EOF
 
   cat > "$svc/templates/service.yaml" <<'EOF'
@@ -184,3 +199,113 @@ echo "$SERVICES" | while IFS='|' read -r svc domain port; do
   gen "$svc" "$domain" "$port" "$replicas"
 done
 echo "generated $(echo "$SERVICES" | grep -c '|') service charts."
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Image-defect workarounds (2 of the 60 published images ship a config file that
+#  fails to parse, so the service crash-loops on startup — nothing in THIS repo is
+#  wrong). We can't edit the private image, so each affected chart mounts a CORRECTED
+#  copy of the file (a ConfigMap, from config/<file>) and points the JVM at it via an
+#  env var. The deployment template above renders the mount/env only when a chart sets
+#  `configOverride`, so the other 58 charts are byte-for-byte unchanged.
+#
+#    • balance-service — BOOT-INF/classes/application.yml wrote the redis block as a YAML
+#      *flow* mapping whose values are unquoted ${..} placeholders:
+#          redis: { host: ${REDIS_HOST:redis}, port: ${REDIS_PORT:6379} }
+#      The '{' inside '${' is illegal in a flow scalar → snakeyaml "expected ',' or '}',
+#      but got {". Fixed by writing redis as a block mapping. SPRING_CONFIG_LOCATION makes
+#      Spring load ONLY the corrected file (the broken classpath copy is never parsed).
+#
+#    • cheque-service — BOOT-INF/classes/logback-spring.xml had an XML comment containing
+#      '---' ('--' is not permitted inside an XML comment) → logback JoranException at boot.
+#      Fixed in the COMMENT only; the runtime <pattern> is untouched, so logging output is
+#      byte-identical. LOGGING_CONFIG makes Spring use the corrected logback file.
+# ─────────────────────────────────────────────────────────────────────────────
+config_override() {   # <svc> <file> <envname> <envval>
+  local svc=$1 file=$2 envname=$3 envval=$4
+  mkdir -p "$svc/config"
+  cat >> "$svc/values.yaml" <<EOF
+
+# Image-defect workaround (see _generate.sh): the published image's $file fails to parse
+# and crash-loops the pod; mount a corrected copy at /config and point the JVM at it.
+configOverride:
+  file: $file
+  env: { name: $envname, value: "$envval" }
+EOF
+  cat > "$svc/templates/config-override.yaml" <<'EOF'
+{{- with .Values.configOverride }}
+# A corrected copy of a config file that is broken inside the published image. The
+# Deployment mounts this at /config and points the JVM at it (see values.yaml).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $.Chart.Name }}-config
+data:
+  {{ .file }}: |-
+{{ $.Files.Get (printf "config/%s" .file) | indent 4 }}
+{{- end }}
+EOF
+}
+
+config_override balance-service application.yml    SPRING_CONFIG_LOCATION optional:file:/config/application.yml
+config_override cheque-service  logback-spring.xml LOGGING_CONFIG         file:/config/logback-spring.xml
+
+# The corrected files. These are the image originals with ONLY the parse bug fixed, so the
+# services behave exactly as intended. `${..}` are resolved by Spring at runtime (envFrom
+# bankobs-env / SERVICE_* env), so they must stay literal here.
+cat > balance-service/config/application.yml <<'EOF'
+spring:
+  config:
+    import: "optional:classpath:application-common.yml"
+  application:
+    name: balance-service
+  datasource:
+    url: ${ORACLE_URL:jdbc:oracle:thin:@oracle:1521/XEPDB1}
+    username: ${ORACLE_USER:BANKOBS_CORE}
+    password: ${ORACLE_PASSWORD:Training123!}
+    driver-class-name: oracle.jdbc.OracleDriver
+    hikari: { maximum-pool-size: 10, connection-timeout: 5000 }
+  data:
+    # FIXED: was `redis: { host: ${REDIS_HOST:redis}, port: ${REDIS_PORT:6379} }` — an
+    # unquoted ${..} inside a YAML flow mapping is a parse error. Block style avoids it.
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
+    consumer:
+      key-deserializer:   org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      auto-offset-reset:  earliest
+      group-id:           balance-service
+server:
+  port: ${SERVICE_PORT:8003}
+service:
+  version: ${SERVICE_VERSION:1.0.0}
+EOF
+
+cat > cheque-service/config/logback-spring.xml <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ── INTENTIONALLY UNSTRUCTURED LOGGING ──
+  cheque-service emits classic Spring Boot console output, NOT JSON.
+  This is a Logstash / Fluent Bit parsing lab target — students should
+  write a grok pattern that extracts {timestamp, level, thread, logger,
+  message} from this format and converts it to JSON in the pipeline.
+
+  Example line (the field after the PID is Spring Boot's three-hyphen
+  separator, shown here as [SEP] because an XML comment may not contain
+  a literal double hyphen — that is exactly the bug this file fixes):
+    2026-06-15 14:23:01.234  INFO 1 [SEP] [           main] c.b.cheque.ChequeController : message
+-->
+<configuration>
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %5p ${PID:- } --- [%15.15t] %-40.40logger{39} : %m%n</pattern>
+    </encoder>
+  </appender>
+  <root level="${LOG_LEVEL:-INFO}">
+    <appender-ref ref="CONSOLE"/>
+  </root>
+</configuration>
+EOF
+echo "applied config-override workaround to: balance-service, cheque-service."

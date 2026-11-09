@@ -29,7 +29,22 @@ spec:
           env:
             - { name: SERVICE_NAME, value: {{ .Chart.Name | quote }} }
             - { name: SERVICE_PORT, value: {{ .Values.service.port | quote }} }
+            {{- with .Values.configOverride }}
+            # A couple of published images ship a config file that fails to parse and
+            # crash-loops the pod. This env var points the JVM at the corrected copy
+            # mounted below from the {{ $.Chart.Name }}-config ConfigMap (image-free fix).
+            - { name: {{ .env.name }}, value: {{ .env.value | quote }} }
+            {{- end }}
           livenessProbe:  { httpGet: { path: /health/live,  port: {{ .Values.service.port }} }, initialDelaySeconds: 30 }
           readinessProbe: { httpGet: { path: /health/ready, port: {{ .Values.service.port }} }, initialDelaySeconds: 10 }
+          {{- with .Values.configOverride }}
+          volumeMounts:
+            - { name: config-override, mountPath: /config, readOnly: true }
+          {{- end }}
           resources:
 {{ toYaml .Values.resources | indent 12 }}
+      {{- with .Values.configOverride }}
+      volumes:
+        - name: config-override
+          configMap: { name: {{ $.Chart.Name }}-config }
+      {{- end }}

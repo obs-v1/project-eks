@@ -12,3 +12,9 @@ observabilityMode: full
 resources:
   requests: { cpu: 100m, memory: 128Mi }
   limits:   { cpu: 500m, memory: 512Mi }
+
+# Image-defect workaround (see _generate.sh): the published image's logback-spring.xml fails to parse
+# and crash-loops the pod; mount a corrected copy at /config and point the JVM at it.
+configOverride:
+  file: logback-spring.xml
+  env: { name: LOGGING_CONFIG, value: "file:/config/logback-spring.xml" }
