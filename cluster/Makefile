@@ -8,6 +8,11 @@
 # ─────────────────────────────────────────────────────────────────────────────
 REGION ?= us-east-1
 
+# Terraform state lives OUTSIDE the repo so a re-clone / `git clean` / checkout can't wipe it
+# (a repo-local terraform.tfstate was lost once, leaving `destroy` unable to see anything). It is
+# passed to the `local` backend at init time. Override with `make ... STATE_FILE=/some/path.tfstate`.
+STATE_FILE ?= $(HOME)/.terraform/state/project-eks-cluster.tfstate
+
 # Map friendly make args → TF_VAR_* so the student doesn't touch tfvars if they
 # don't want to. Anything already in terraform.tfvars still works.
 ifdef ZONE_ID
@@ -30,7 +35,9 @@ export TF_VAR_aws_region = $(REGION)
 .PHONY: init plan apply destroy clean-lbs fmt validate kubeconfig output
 
 init:
-	terraform init
+	@mkdir -p $(dir $(STATE_FILE))
+	terraform init -input=false -reconfigure -backend-config="path=$(STATE_FILE)"
+	@echo "  ✓ terraform state → $(STATE_FILE) (outside the repo; survives re-clones)"
 
 fmt:
 	terraform fmt -recursive
@@ -87,7 +94,7 @@ destroy: clean-lbs
 # Delete every type=LoadBalancer Service in both clusters so the AWS cloud provider
 # tears down their NLBs/ELBs (and the ENIs/SG rules that would block VPC deletion).
 # Best-effort: ignores a cluster/context that is already gone.
-clean-lbs:
+clean-lbs: init
 	-@aws eks update-kubeconfig --region $(REGION) --name $$(terraform output -raw observability_cluster_name 2>/dev/null) --alias $$(terraform output -raw observability_cluster_name 2>/dev/null) >/dev/null 2>&1
 	-@aws eks update-kubeconfig --region $(REGION) --name $$(terraform output -raw bankobs_cluster_name 2>/dev/null)       --alias $$(terraform output -raw bankobs_cluster_name 2>/dev/null)       >/dev/null 2>&1
 	@for c in $$(terraform output -raw observability_cluster_name 2>/dev/null) $$(terraform output -raw bankobs_cluster_name 2>/dev/null); do \
@@ -98,10 +105,10 @@ clean-lbs:
 	@echo "  (LB Services deleted; AWS is now reaping the NLBs/ELBs)"
 
 # Point kubectl at both clusters (aliases match the cluster names).
-kubeconfig:
+kubeconfig: init
 	@aws eks update-kubeconfig --region $(REGION) --name $$(terraform output -raw observability_cluster_name) --alias $$(terraform output -raw observability_cluster_name)
 	@aws eks update-kubeconfig --region $(REGION) --name $$(terraform output -raw bankobs_cluster_name) --alias $$(terraform output -raw bankobs_cluster_name)
 	@echo "  ✓ kubeconfig updated for both clusters."
 
-output:
+output: init
 	terraform output
