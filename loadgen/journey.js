@@ -23,22 +23,32 @@ export const options = {
   noConnectionReuse: false,
 };
 
-const CUST = __ENV.CUST || 'CUST-00000001';
 const PASS = __ENV.PASS || 'Training@123';
 const PAGES = ['/dashboard', '/cards', '/loans', '/transactions', '/pay'];
-// Payer + payees MUST be VPAs seeded in the vpa_registry that resolve to real Oracle accounts,
-// else the credit leg 500s and the payment 502s (a data error, not load). These are the demo
-// beneficiaries the web-portal pay page shows — see app/.../cassandra/init-scripts/02-seed.cql.
-const FROM_VPA = __ENV.FROM_VPA || 'cust00000001@bankobs';
-const PAYEES = ['demo@okaxis', 'demo@okhdfc', 'demo@okicici', 'demo@oksbi', 'priya.s@okhdfc', 'cust00000002@bankobs'];
+// Payments RECIRCULATE within a pool of well-funded internal customers: each iteration picks one
+// as the logged-in payer and ANOTHER as the payee, so money only moves between them and no single
+// account drains. Why this matters: the old loadgen always paid FROM the one account
+// cust00000001@bankobs TO external demo payees, so that account's balance fell to ~0 and every
+// later debit returned ERR_INSUFFICIENT_FUNDS → account-service 409 → web-portal 502 — a steady,
+// growing error rate on the RED dashboard that was pure data-drain, not a real fault. Each
+// {cust,vpa} below is seeded in Oracle + vpa_registry (02-seed.cql) and funded with ₹200k+;
+// cust00000001 is deliberately NOT a payer (its demo balance is already spent). The sender must be
+// the logged-in customer, so payer identity and from_vpa are chosen together. Override the roster
+// with POOL_CUSTS / POOL_VPAS (comma-separated, index-aligned).
+const POOL_CUSTS = (__ENV.POOL_CUSTS || 'CUST-00000002,CUST-00000003,CUST-00000004,CUST-00000005').split(',');
+const POOL_VPAS  = (__ENV.POOL_VPAS  || 'cust00000002@bankobs,cust00000003@bankobs,cust00000004@bankobs,cust00000005@bankobs').split(',');
+const POOL = POOL_CUSTS.map((c, i) => ({ cust: c.trim(), vpa: POOL_VPAS[i].trim() }));
 
 function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
 
 export default function () {
+  // Act as a random pool customer this iteration — rotating the payer is what keeps any one
+  // account from draining (the sender must be whoever is logged in).
+  const me = pick(POOL);
   // 1) login — k6 keeps the bankobs_session cookie in the per-VU jar
   const login = http.post(
     `${BASE}/api/auth/login`,
-    JSON.stringify({ customer_id: CUST, password: PASS }),
+    JSON.stringify({ customer_id: me.cust, password: PASS }),
     { headers: { 'Content-Type': 'application/json' }, tags: { name: 'login' } },
   );
   const okLogin = check(login, { 'login 200': (r) => r.status === 200 });
@@ -58,9 +68,12 @@ export default function () {
   // 3) sometimes send a UPI payment (full payment chain; best-effort — may fail under a fault)
   if (Math.random() < PAY_PROB) {
     const amt = Math.floor(Math.random() * 500) + 10;
+    // Pay another pool member (never yourself) so funds recirculate and balances stay healthy.
+    let payee = pick(POOL);
+    if (POOL.length > 1) { while (payee.vpa === me.vpa) payee = pick(POOL); }
     const pay = http.post(
       `${BASE}/api/upi/pay`,
-      JSON.stringify({ from_vpa: FROM_VPA, to_vpa: pick(PAYEES), amount: amt }),
+      JSON.stringify({ from_vpa: me.vpa, to_vpa: payee.vpa, amount: amt }),
       { headers: { 'Content-Type': 'application/json' }, tags: { name: 'upi_pay' }, timeout: '15s' },
     );
     check(pay, { 'pay 200': (r) => r.status === 200 }) || journeyErrors.add(1);
