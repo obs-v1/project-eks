@@ -53,6 +53,14 @@ module "eks_observability" {
       max_size       = var.obs_node_scaling.max
       desired_size   = var.obs_node_scaling.desired
       labels         = { role = "observability" }
+      # Pin this node group to ONE AZ. The obs stack is all EBS-backed StatefulSets
+      # (Prometheus/Grafana/Loki/Alertmanager/Pyroscope). On a Spot interruption the
+      # replacement node can come up in a different AZ than the volume (an EBS volume is
+      # stuck in its own AZ), leaving the pod unschedulable — "didn't match
+      # PersistentVolume's node affinity" — and the cluster-autoscaler can't fix it
+      # ("NotTriggerScaleUp"). Keeping every node and every volume in a single AZ means
+      # they can never strand. private_subnets is [AZ0, AZ1, AZ2]; index 0 is the first AZ.
+      subnet_ids = [module.vpc_observability.private_subnets[0]]
     }
   }
 
@@ -108,6 +116,12 @@ module "eks_bankobs" {
       max_size       = var.bankobs_node_scaling.max
       desired_size   = var.bankobs_node_scaling.desired
       labels         = { role = "bankobs" }
+      # Pin to ONE AZ for the same reason as the observability node group above: bankobs
+      # runs EBS-backed StatefulSets (Kafka, Oracle, Cassandra, Postgres, Mongo, …). A
+      # Spot reschedule into another AZ strands them — e.g. Kafka came back with an empty
+      # data dir and every `banking.*` topic gone, so services hung producing events.
+      # Single-AZ keeps nodes and volumes co-located. index 0 = the first AZ.
+      subnet_ids = [module.vpc_bankobs.private_subnets[0]]
     }
   }
 
