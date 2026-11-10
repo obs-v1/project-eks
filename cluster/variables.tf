@@ -30,7 +30,7 @@ variable "project" {
 variable "eks_version" {
   description = "Kubernetes version for both clusters. Bump to the latest EKS standard-support release; check with: aws eks describe-cluster-versions"
   type        = string
-  default     = "1.34"
+  default     = "1.37"
 }
 
 # ── Networking ────────────────────────────────────────────────────────────────
@@ -75,7 +75,7 @@ variable "public_api_access_cidrs" {
 variable "obs_node_instance_types" {
   description = "Instance types for the observability cluster's Spot node group."
   type        = list(string)
-  default     = ["m5.2xlarge", "m5a.2xlarge", "m6i.2xlarge", "m5n.2xlarge"]
+  default     = ["t3.xlarge"]
 }
 
 variable "obs_node_scaling" {
@@ -87,7 +87,7 @@ variable "obs_node_scaling" {
 variable "bankobs_node_instance_types" {
   description = "Instance types for the bankobs cluster's Spot node group (bigger: 60 svcs + stateful DBs)."
   type        = list(string)
-  default     = ["m5.4xlarge", "m5a.4xlarge", "m6i.4xlarge", "m5n.4xlarge"]
+  default     = ["t3.2xlarge"]
 }
 
 variable "bankobs_node_scaling" {
