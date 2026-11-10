@@ -37,6 +37,16 @@ spec:
       # the volume. fsGroup chowns the mount to gid 1000 → writable.
       securityContext:
         fsGroup: 1000
+      # A freshly-formatted ext4 EBS volume has a root-owned lost+found at its root.
+      # Kafka's LogManager scans KAFKA_LOG_DIRS and dies on any entry that isn't a
+      # topic-partition dir ("Error starting LogManager"), so remove it before boot.
+      initContainers:
+        - name: rm-lost-found
+          image: apache/kafka:3.7.0
+          command: ["sh", "-c", "rm -rf /var/lib/kafka/data/lost+found || true"]
+          securityContext: { runAsUser: 0 }
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/kafka/data }
       containers:
         - name: kafka
           image: apache/kafka:3.7.0
