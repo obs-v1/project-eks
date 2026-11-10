@@ -20,7 +20,7 @@ metadata:
   namespace: bankobs
   labels: { app: web-portal, domain: platform }
 spec:
-  replicas: 1
+  replicas: 3
   selector: { matchLabels: { app: web-portal } }
   template:
     metadata:
@@ -40,17 +40,25 @@ spec:
             - { name: MANAGEMENT_TRACING_ENABLED, value: "false" }
             - { name: MANAGEMENT_OTLP_METRICS_EXPORT_ENABLED, value: "false" }
             - { name: LOGGING_LEVEL_IO_OPENTELEMETRY, value: "OFF" }
+          # The probe path `/` is a full Next.js SSR render — heavy under load. The
+          # default 1s timeout trips during a GC pause or at 40 VUs on a tight CPU
+          # cap, so the liveness probe KILLS the healthy pod (exit137/Error) →
+          # restart loop. Give the probes a real timeout + more tolerance.
           readinessProbe:
             httpGet: { path: /, port: 8200 }
             initialDelaySeconds: 15
             periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
           livenessProbe:
             httpGet: { path: /, port: 8200 }
             initialDelaySeconds: 45
             periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
           resources:
-            # Next.js SSR under load (e.g. k6 at 40 VUs) exceeds 256Mi and gets
-            # OOMKilled (exit 137) → Service loses endpoints → clients see
-            # "connection refused". 1Gi gives the SSR runtime real headroom.
-            requests: { cpu: 50m, memory: 256Mi }
-            limits: { cpu: 500m, memory: 1Gi }
+            # Next.js SSR at 40 VUs exceeds 256Mi (OOMKill) and starves on a 500m
+            # CPU cap (slow renders → probe timeouts → liveness kills). 1Gi + 2 CPU
+            # across 3 replicas gives the SSR runtime real headroom under load.
+            requests: { cpu: 250m, memory: 256Mi }
+            limits: { cpu: "2", memory: 1Gi }
