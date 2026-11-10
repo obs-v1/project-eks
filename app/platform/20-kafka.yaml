@@ -52,23 +52,23 @@ spec:
             - { name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR, value: "1" }
             - { name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR, value: "1" }
             - { name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR, value: "1" }
+            # Persist the log on the PVC. Without this, apache/kafka defaults log.dirs
+            # to /tmp/kafka-logs (ephemeral container fs), so the PVC at
+            # /var/lib/kafka/data went unused and every topic was lost on reschedule.
+            - { name: KAFKA_LOG_DIRS, value: "/var/lib/kafka/data" }
+          # Probes do a plain TCP check on the broker port, NOT `kafka-topics.sh`:
+          # the CLI launches a full JVM on every probe, which under CPU contention
+          # routinely exceeds the timeout and gets the (healthy) broker killed →
+          # CrashLoopBackOff. A single broker listening on 9092 is ready.
           startupProbe:
-            exec:
-              command:
-                - bash
-                - -c
-                - /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1
+            tcpSocket: { port: 9092 }
             periodSeconds: 10
-            timeoutSeconds: 10
+            timeoutSeconds: 5
             failureThreshold: 30
           readinessProbe:
-            exec:
-              command:
-                - bash
-                - -c
-                - /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1
+            tcpSocket: { port: 9092 }
             periodSeconds: 15
-            timeoutSeconds: 10
+            timeoutSeconds: 5
           livenessProbe:
             tcpSocket: { port: 9092 }
             periodSeconds: 20
