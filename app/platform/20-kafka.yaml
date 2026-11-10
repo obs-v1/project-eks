@@ -32,6 +32,11 @@ spec:
     metadata:
       labels: { app: kafka, tier: data }
     spec:
+      # apache/kafka runs as uid/gid 1000 (appuser). The gp3 PVC mounts root-owned,
+      # so the broker can't write meta.properties when formatting KAFKA_LOG_DIRS on
+      # the volume. fsGroup chowns the mount to gid 1000 → writable.
+      securityContext:
+        fsGroup: 1000
       containers:
         - name: kafka
           image: apache/kafka:3.7.0
