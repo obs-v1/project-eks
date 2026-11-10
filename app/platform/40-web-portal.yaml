@@ -49,5 +49,8 @@ spec:
             initialDelaySeconds: 45
             periodSeconds: 30
           resources:
-            requests: { cpu: 50m, memory: 128Mi }
-            limits: { cpu: 500m, memory: 256Mi }
+            # Next.js SSR under load (e.g. k6 at 40 VUs) exceeds 256Mi and gets
+            # OOMKilled (exit 137) → Service loses endpoints → clients see
+            # "connection refused". 1Gi gives the SSR runtime real headroom.
+            requests: { cpu: 50m, memory: 256Mi }
+            limits: { cpu: 500m, memory: 1Gi }
