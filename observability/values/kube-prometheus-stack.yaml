@@ -1,6 +1,26 @@
-# kube-prometheus-stack — Prometheus + Alertmanager + Grafana + node-exporter + kube-state.
+# kube-prometheus-stack — Prometheus + Alertmanager + Grafana (+ correlation pivots).
 # Grafana ships pre-wired with all four correlation pivots (the heart of the course).
 fullnameOverride: kps
+
+# ── Infra metric COLLECTION is OTel-only, on BOTH clusters ──────────────────────
+# node / pod / container usage and cluster-state come from the OTel Collector
+# (hostmetrics + kubeletstats on the node DaemonSets, k8s_cluster on the singleton
+# cluster collectors) and arrive here by remote-write. So Prometheus is a pure
+# remote-write TSDB for infra metrics. Disable kps's own scrapers that OTel now owns,
+# otherwise the same series would be collected twice (once canonical, once OTel-named).
+#   node_exporter   → hostmetrics receiver (system.* / k8s.node.*)
+#   kube-state      → k8s_cluster receiver (k8s.pod.phase, k8s.*.desired/ready, restarts…)
+#   kubelet/cAdvisor → kubeletstats receiver (container.* / k8s.pod.*)
+# NOTE: coreDNS + kube-apiserver ServiceMonitors are LEFT ON — OTel has no equivalent
+# for those control-plane /metrics, so dropping them would be a real gap. The stock kps
+# "Compute Resources" dashboards/alerts (which key off node_*/kube_* names) will have no
+# data by design; the course uses OTel-named panels instead.
+nodeExporter:
+  enabled: false
+kubeStateMetrics:
+  enabled: false
+kubelet:
+  enabled: false
 
 # ── Prometheus ────────────────────────────────────────────────────────────────
 prometheus:

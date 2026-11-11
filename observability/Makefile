@@ -22,15 +22,29 @@ HN = -n $(NS)
 
 AGENT_CTX ?= obs-v1-bankobs   # the agent runs IN the bankobs cluster
 
-.PHONY: repos ensure-context namespace all otel-collector kube-prometheus-stack loki jaeger pyroscope pyrra ingress collector-lb dashboards agent destroy
+.PHONY: repos ensure-context namespace all otel-collector kube-prometheus-stack loki jaeger pyroscope pyrra ingress collector-lb dashboards agent obs-agent destroy
 
-# Collector agent in the BANKOBS cluster: scrapes /metrics + tails logs locally and forwards
-# them by OTLP to the central collector across the peering. (Deploy after the obs stack.)
+# OTel collectors in the BANKOBS cluster (metrics + logs, forwarded by OTLP across the peering):
+#   bankobs-agent   (DaemonSet)  hostmetrics + kubeletstats + app /metrics scrape + log tail
+#   bankobs-cluster (1 replica)  k8s_cluster cluster-state  (single instance → no duplicate series)
+# OTel is the SOLE metrics collector — kps node-exporter/KSM/kubelet are disabled. (Deploy after
+# the obs stack so the gateway LB exists.)
 agent: repos
 	@kubectl config get-contexts $(AGENT_CTX) >/dev/null 2>&1 || aws eks update-kubeconfig --region $(REGION) --name $(AGENT_CTX) --alias $(AGENT_CTX) >/dev/null
 	helm --kube-context $(AGENT_CTX) upgrade --install bankobs-agent open-telemetry/opentelemetry-collector \
 	  --version 0.178.1 -n monitoring --create-namespace -f agent/values-agent.yaml
-	@echo "  ✓ bankobs-agent deployed to $(AGENT_CTX) (metrics scrape + logs tail → obs collector)."
+	helm --kube-context $(AGENT_CTX) upgrade --install bankobs-cluster open-telemetry/opentelemetry-collector \
+	  --version 0.178.1 -n monitoring --create-namespace -f agent/values-cluster.yaml
+	@echo "  ✓ bankobs OTel collectors on $(AGENT_CTX): node agent (hostmetrics+kubeletstats+logs) + cluster collector (k8s_cluster) → obs gateway."
+
+# OTel collectors for the OBS cluster's OWN infra (node/pod/container + cluster-state), forwarding
+# to the LOCAL gateway. Same OTel-only design as the bankobs side. Needs the gateway deployed first.
+obs-agent: repos namespace
+	helm --kube-context $(CONTEXT) upgrade --install obs-agent open-telemetry/opentelemetry-collector \
+	  --version 0.178.1 $(HN) -f agent/values-obs-node.yaml
+	helm --kube-context $(CONTEXT) upgrade --install obs-cluster open-telemetry/opentelemetry-collector \
+	  --version 0.178.1 $(HN) -f agent/values-obs-cluster.yaml
+	@echo "  ✓ obs OTel collectors on $(CONTEXT): node agent (hostmetrics+kubeletstats) + cluster collector (k8s_cluster) → local gateway."
 
 repos:
 	helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
@@ -49,8 +63,8 @@ namespace: ensure-context
 
 # Order: Prometheus Operator CRDs first (kps), then backends, then collector, then pyrra, then
 # edges, then the agent in the bankobs cluster (scrapes bankobs → forwards to this collector).
-all: repos namespace kube-prometheus-stack loki jaeger pyroscope otel-collector pyrra collector-lb ingress dashboards agent
-	@echo ""; echo "  ✓ observability stack deployed to $(CONTEXT) + agent to $(AGENT_CTX)."
+all: repos namespace kube-prometheus-stack loki jaeger pyroscope otel-collector pyrra collector-lb ingress dashboards obs-agent agent
+	@echo ""; echo "  ✓ observability stack deployed to $(CONTEXT) + OTel collectors to $(CONTEXT) & $(AGENT_CTX)."
 
 kube-prometheus-stack: namespace
 	$(H) kps prometheus-community/kube-prometheus-stack --version 92.17.0 $(HN) \
@@ -93,5 +107,7 @@ ingress: namespace
 destroy:
 	-$(K) delete -f pyrra/slo.yaml --ignore-not-found
 	-$(K) delete -f pyrra/pyrra.yaml --ignore-not-found
+	-helm --kube-context $(CONTEXT) uninstall obs-agent obs-cluster $(HN)
+	-helm --kube-context $(AGENT_CTX) uninstall bankobs-agent bankobs-cluster -n monitoring
 	-helm --kube-context $(CONTEXT) uninstall otel-collector pyroscope jaeger loki kps $(HN)
 	@echo "  ✓ stack removed (PVCs/CRDs kept — delete manually if you want a clean slate)."

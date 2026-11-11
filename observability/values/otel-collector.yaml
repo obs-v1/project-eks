@@ -67,6 +67,14 @@ config:
       endpoint: http://kps-prometheus:9090/api/v1/write
       tls: { insecure: true }
       send_metadata: true
+      # Promote OTel resource attributes (k8s.namespace.name, k8s.pod.name, k8s.node.name,
+      # k8s.cluster.name, host.name, container.name …) onto EVERY series as Prometheus labels.
+      # Without this the infra metrics from hostmetrics/kubeletstats/k8s_cluster land with their
+      # identity stranded in a separate `target_info` series and you can't filter them by
+      # pod/namespace/node — i.e. the "pod usage" would be unqueryable. (Applies to all metrics
+      # this gateway writes; the app OTLP + spanmetrics series already carry their dims as labels.)
+      resource_to_telemetry_conversion:
+        enabled: true
     otlphttp/loki:
       endpoint: http://loki:3100/otlp
       tls: { insecure: true }

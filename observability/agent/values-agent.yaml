@@ -29,7 +29,9 @@ extraEnvs:
 presets:
   kubernetesAttributes: { enabled: true }               # k8sattributes processor + RBAC (pods get/list/watch)
   logsCollection:        { enabled: true, includeCollectorLogs: false }  # filelog receiver + /var/log/pods mounts
-  hostMetrics:           { enabled: false }
+  # OTel IS the metrics collector here — no node-exporter, no cAdvisor scrape job:
+  hostMetrics:           { enabled: true }   # hostmetrics receiver (node cpu/mem/disk/net/load) + hostfs mounts
+  kubeletMetrics:        { enabled: true }   # kubeletstats receiver (node/pod/container cpu·mem·fs·net) + RBAC (nodes/stats)
 
 resources:
   requests: { cpu: 100m, memory: 256Mi }
@@ -69,6 +71,7 @@ config:
     resource:
       attributes:
         - { key: deployment.environment, value: training, action: upsert }
+        - { key: k8s.cluster.name, value: obs-v1-bankobs, action: upsert }  # so every series is filterable by cluster
 
   exporters:
     # Everything forwards by OTLP to the central collector across the peering.
@@ -81,5 +84,8 @@ config:
     pipelines:
       # The logsCollection preset supplies the filelog receiver; kubernetesAttributes prepends
       # k8sattributes to each pipeline. We route both to the OTLP forwarder.
-      metrics: { receivers: [prometheus], processors: [memory_limiter, resource, batch], exporters: [otlp] }
+      # prometheus = any app /metrics (bankobs apps expose none → spanmetrics covers RED);
+      # hostmetrics = node, kubeletstats = pod/container usage. hostmetrics/kubeletstats
+      # receivers are supplied by the presets above.
+      metrics: { receivers: [prometheus, hostmetrics, kubeletstats], processors: [memory_limiter, resource, batch], exporters: [otlp] }
       logs:    { receivers: [filelog],    processors: [memory_limiter, resource, batch], exporters: [otlp] }
