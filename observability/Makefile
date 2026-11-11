@@ -81,7 +81,10 @@ loki: namespace
 	$(H) loki grafana/loki --version 7.5.0 $(HN) -f values/loki.yaml
 
 jaeger: namespace
-	$(H) jaeger jaegertracing/jaeger --version 4.16.1 $(HN) -f values/jaeger.yaml
+	# Pin 4.13.1 (Jaeger 2.20.0). Do NOT bump past 4.14.x (Jaeger 2.21+) — 2.21 dropped the v1
+	# query API (/api/services, /api/traces) that Grafana's Jaeger datasource still calls, which
+	# 404s the datasource (health check + service/operation pickers + search). See values/jaeger.yaml.
+	$(H) jaeger jaegertracing/jaeger --version 4.13.1 $(HN) -f values/jaeger.yaml
 
 pyroscope: namespace
 	$(H) pyroscope grafana/pyroscope --version 2.4.2 $(HN) -f values/pyroscope.yaml
