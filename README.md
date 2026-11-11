@@ -1,7 +1,7 @@
 # project-eks — BankObs + full observability on EKS, the real way
 
 Two EKS clusters in two VPCs: one runs the **observability stack**, the other runs **BankObs**
-(60 microservices). Telemetry flows **privately** between them over VPC peering; the UIs and the
+(59 microservices). Telemetry flows **privately** between them over VPC peering; the UIs and the
 app frontend are exposed publicly through Traefik with your own DNS + ACM cert.
 
 ![project-eks architecture](docs/architecture.png)
@@ -16,7 +16,7 @@ app frontend are exposed publicly through Traefik with your own DNS + ACM cert.
 |---|---|---|
 | [`cluster/`](cluster) | Terraform: 2 VPCs + peering + private zone + 2 EKS + Spot nodes + addons | `make apply` |
 | [`observability/`](observability) | Helm: Collector, kube-prometheus-stack, Loki, Jaeger, Pyroscope, Pyrra | `make all` |
-| [`app/`](app) | BankObs: 60 per-service charts (passthrough Dockerfiles) + platform StatefulSets | `make all` |
+| [`app/`](app) | BankObs: 59 per-service charts (passthrough Dockerfiles) + platform StatefulSets | `make all` |
 
 ## End-to-end
 
@@ -42,8 +42,7 @@ cd ../app && make all DOMAIN=lab.example.com LICENSE_KEY=eyJ...
 > **Oracle** (`oracle-0`) takes ~5-10 min on first boot (datafile creation); the few core-banking
 > services that depend on it stay down until it's ready. Everything else comes up in a couple of minutes.
 
-Then: `https://grafana.lab.example.com` (single pane), `https://bankobs.lab.example.com` (app),
-and fault injection via `kubectl -n bankobs scale deploy/fault-injector --replicas=1`.
+Then: `https://grafana.lab.example.com` (single pane) and `https://bankobs.lab.example.com` (app).
 
 ## Cost & teardown
 

@@ -1,13 +1,13 @@
 # project-eks/app — BankObs on EKS
 
-BankObs is **60 microservices + a platform tier**, laid out so a student can run their own
+BankObs is **59 microservices + a platform tier**, laid out so a student can run their own
 CI/CD without ever seeing the source.
 
 ## Layout
 
 ```
 app/
-├── _generate.sh          # stamps the 60 per-service chart folders (idempotent; `make regen`)
+├── _generate.sh          # stamps the 59 per-service chart folders (idempotent; `make regen`)
 ├── Makefile              # deploy everything, or any single service
 ├── platform/             # StatefulSet DBs + license-checker + web-portal + init jobs (gp3)
 └── <service>/            # one per microservice:
@@ -39,7 +39,7 @@ make all DOMAIN=lab.example.com
 
 - `make platform` — the StatefulSet databases (postgres, oracle, mongodb, redis, cassandra,
   elasticsearch, kafka, rabbitmq) + `license-checker` + `web-portal` + init jobs, all on **gp3**.
-- `make services` — `helm upgrade --install` for all 60 charts, **one after another, no waiting**.
+- `make services` — `helm upgrade --install` for all 59 charts, **one after another, no waiting**.
 - `make frontend DOMAIN=…` — `web-portal` at `bankobs.<DOMAIN>` via Traefik (TLS at the NLB).
 
 ## Telemetry
@@ -47,11 +47,3 @@ make all DOMAIN=lab.example.com
 Every service's `OTEL_EXPORTER_OTLP_ENDPOINT` points at **`http://otel-collector.obs.internal:4317`** —
 the observability cluster's Collector, reached **privately** over the VPC peering. `OBSERVABILITY_MODE=full`
 is on, so spans/metrics/logs flow the moment the service starts.
-
-## Fault injection
-
-`fault-injector` ships dormant (`replicaCount: 0`). Arm it:
-
-```bash
-kubectl --context obs-v1-bankobs -n bankobs scale deploy/fault-injector --replicas=1
-```

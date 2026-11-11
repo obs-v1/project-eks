@@ -181,10 +181,10 @@ clickable) so even the overview satisfies logs→trace→logs. Variables: ds_lok
 "BankObs".
 ```
 
-## PROMPT 6 — Incident / Fault-Injection Demo
+## PROMPT 6 — Incident Drill
 ```
-Build "BankObs — Incident Drill" tuned to the fault-injector (kubectl -n bankobs scale
-deploy/fault-injector --replicas=1). One-screen before/during/after story from logs+traces for a
+Build "BankObs — Incident Drill" tuned to an induced incident (pick a drill from
+FAULT-SCENARIOS.md, e.g. scaling a dependency down). One-screen before/during/after story from logs+traces for a
 $target service and its dependents: error-log rate for the target, error blast radius across
 services (sum by service_name), a Loki logs panel of the target's errors with trace_id clickable,
 and an embedded Jaeger search for the target so the instructor clicks a failing trace → its logs.

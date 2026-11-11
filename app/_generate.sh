@@ -12,7 +12,7 @@ REGISTRY_DEFAULT="public.ecr.aws/w8x4g9h7/obs-v1"
 TAG_DEFAULT="1.0.0"
 OTEL_ENDPOINT="http://otel-collector.obs.internal:4317"   # private, cross-VPC (obs cluster)
 
-# svc|domain|port  — fault-injector ships dormant (replicas 0), armed by scaling to 1.
+# svc|domain|port
 SERVICES="
 aadhaar-adapter|customer-identity|8032
 account-service|core-banking|8001
@@ -33,7 +33,6 @@ credit-card-service|retail-banking|8024
 demat-service|retail-banking|8026
 eligibility-engine|retail-banking|8028
 email-service|notifications|8052
-fault-injector|fault-injector|8000
 fd-service|retail-banking|8022
 fraud-detection|fraud-risk|8040
 fx-service|payments|8017
@@ -200,13 +199,12 @@ EOF
 echo "$SERVICES" | while IFS='|' read -r svc domain port; do
   [ -z "$svc" ] && continue
   replicas=1
-  [ "$svc" = "fault-injector" ] && replicas=0
   gen "$svc" "$domain" "$port" "$replicas"
 done
 echo "generated $(echo "$SERVICES" | grep -c '|') service charts."
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  Image-defect workarounds (2 of the 60 published images ship a config file that
+#  Image-defect workarounds (2 of the 59 published images ship a config file that
 #  fails to parse, so the service crash-loops on startup — nothing in THIS repo is
 #  wrong). We can't edit the private image, so each affected chart mounts a CORRECTED
 #  copy of the file (a ConfigMap, from config/<file>) and points the JVM at it via an
