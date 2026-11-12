@@ -40,6 +40,9 @@ is and verify it before moving on.
   └───────────────────────────────────────────────────────────────────────┘
 ```
 
+<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/f3799ec1-8867-4c92-afaf-9707d9ecf260" />
+
+
 **Metrics are OTel-only on both clusters.** The OTel collectors gather node/pod/container usage
 (`hostmetrics` + `kubeletstats`) and cluster state (`k8s_cluster`); Prometheus is a pure
 remote-write store. kube-prometheus-stack's own node-exporter / kube-state-metrics / kubelet
